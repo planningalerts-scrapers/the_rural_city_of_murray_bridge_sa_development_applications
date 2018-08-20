@@ -238,10 +238,14 @@ function parseApplicationElements(elements: Element[], informationUrl: string) {
     }
 }
 
+// Reads and parses development application details from the specified PDF.
+
+let composedImage: jimp = new (jimp as any)(4000, 4000, (error, image) => {});
+
 // Parses an image (from a PDF file).
 
 let count = 0;
-async function parseImage(image: any, scaleFactor: number) {
+async function parseImage(image: any, bounds: Rectangle, transform: any, scaleFactor: number, scaleWidthAndHeight: number) {
     // Convert the image data into a format that can be used by jimp.
 
     let pixelSize = (8 * image.data.length) / (image.width * image.height);
@@ -274,9 +278,17 @@ async function parseImage(image: any, scaleFactor: number) {
         }
     }
 
+    console.log("Composing image.");
+    if (bounds !== undefined) {
+    console.log(`Scaling width and height ${scaleWidthAndHeight}`);
+        jimpImage.scale(scaleWidthAndHeight, jimp.RESIZE_BEZIER);
+        composedImage.blit(jimpImage, bounds.x, bounds.y, 0, 0, image.width * scaleWidthAndHeight, image.height * scaleWidthAndHeight);
+    }
+
     let imageBuffer = await (new Promise((resolve, reject) => jimpImage.getBuffer(jimp.MIME_PNG, (error, buffer) => resolve(buffer))));
     console.log(`Writing C:\\Temp\\Murray Bridge\\MurrayBridge.${count}.png`);
-    jimpImage.write(`C:\\Temp\\Murray Bridge\\MurrayBridge.${count}.png`, () => { console.log("Written."); });
+    if (transform !== undefined)
+        jimpImage.write(`C:\\Temp\\Murray Bridge\\MurrayBridge.${count}.[${transform[0]},${transform[1]},${transform[2]},${transform[3]},${transform[4]},${transform[5]}].png`, () => { console.log("Written."); });
     count++;
     console.log(`Written C:\\Temp\\Murray Bridge\\MurrayBridge.${count}.png`);
 
@@ -305,8 +317,6 @@ let sectionY = 1.0;
     console.log(lines);
 }
 
-// Reads and parses development application details from the specified PDF.
-
 async function parsePdf(url: string) {
     let scaleFactor = 1.0;
     let developmentApplications = [];
@@ -324,6 +334,7 @@ async function parsePdf(url: string) {
     for (let index = 0; index < pdf.numPages; index++) {
         console.log(`Page ${index + 1} of ${pdf.numPages}.`);
         let page = await pdf.getPage(index + 1);
+        let viewportTest = await page.getViewport(1.0);
         let operators = await page.getOperatorList();
 
         // Find and parse any images in the PDF.
@@ -340,7 +351,24 @@ async function parsePdf(url: string) {
                 // Obtain any transform that applies to the image.
 
                 let transform = (index - 1 >= 0 && operators.fnArray[index - 1] === pdfjs.OPS.transform) ? operators.argsArray[index - 1] : undefined;
-            
+                let bounds = undefined;
+
+                if (transform !== undefined) {
+                    // transform = pdfjs.Util.transform(transform, [ 1, 0, 0, -1, 0, 0 ]);
+                    // transform = pdfjs.Util.transform(viewportTest.transform, transform, [ 1, 0, 0, -1, 0, 0 ]);
+                    
+                    // Work around the issue https://github.com/mozilla/pdf.js/issues/8276 (heights are
+                    // exaggerated).  The problem seems to be that the height value is too large in some
+                    // PDFs.  Provide an alternative, more accurate height value by using a calculation
+                    // based on the transform matrix.
+        
+                    // let workaroundHeight = Math.sqrt(transform[2] * transform[2] + transform[3] * transform[3]);
+                    let factor = 1;  // (1 / 0.12);
+                    let factorDimensions = 0.24;
+                    bounds = { x: transform[4] * factor, y: (viewportTest.height - transform[5]) * factor, width: image.width, height: image.height };
+                    console.log(`image[${image.width},${image.height}]: [${bounds.x},${bounds.y},${bounds.width},${bounds.height}]`);
+                }
+
 // let imageTest = new pngjs2.PNG({width: image.width, height: image.height });
 // imageTest.data = Buffer.from(image.data);
 // imageTest.pack().pipe(fs.createWriteStream("C:\\Temp\\MurrayBridge.6.png"));
@@ -353,11 +381,12 @@ async function parsePdf(url: string) {
 
                 imageCount++;
                 console.log(`Examining image ${imageCount} having dimensions ${image.width} by ${image.height}.`);
-                let imageDevelopmentApplications = await parseImage(image, scaleFactor);
+                let imageDevelopmentApplications = await parseImage(image, bounds, transform, scaleFactor, 0.48);
                 developmentApplications = developmentApplications.concat(imageDevelopmentApplications);
             }
         }
 
+composedImage.write(`C:\\Temp\\Murray Bridge\\MurrayBridge.FirstPage.${count}.png`, () => { console.log("Written."); });
 console.log("Stopping after first page (returning empty array).");
 return [];
         
