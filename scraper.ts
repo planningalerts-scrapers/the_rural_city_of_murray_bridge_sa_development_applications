@@ -19,7 +19,7 @@ import * as fs from "fs";
 
 sqlite3.verbose();
 
-const DevelopmentApplicationsUrl = "https://www.murraybridge.sa.gov.au/page.aspx?u=1022";
+const DevelopmentApplicationsUrl = "http://www.murraybridge.sa.gov.au/page.aspx?u=1022";
 const CommentUrl = "mailto:council@murraybridge.sa.gov.au";
 
 declare const global: any;
