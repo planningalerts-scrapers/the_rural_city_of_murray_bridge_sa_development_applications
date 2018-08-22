@@ -241,6 +241,11 @@ function parseApplicationElements(elements: Element[], informationUrl: string) {
 // Parses an image (from a PDF file).
 
 async function parseImage(image: any, bounds: Rectangle, scaleFactor: number) {
+    // Minimise memory usage.
+    
+    if (global.gc)
+        global.gc();
+
     // Convert the image data into a format that can be used by jimp.
 
     let pixelSize = (8 * image.data.length) / (image.width * image.height);
