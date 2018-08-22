@@ -242,7 +242,7 @@ function parseApplicationElements(elements: Element[], informationUrl: string) {
 
 async function parseImage(image: any, bounds: Rectangle, scaleFactor: number) {
     // Minimise memory usage.
-    
+
     if (global.gc)
         global.gc();
 
@@ -303,7 +303,7 @@ async function parseImage(image: any, bounds: Rectangle, scaleFactor: number) {
 }
 
 async function parsePdf(url: string) {
-    let scaleFactor = 3.0;
+    let scaleFactor = 2.0;
     let developmentApplications = [];
 
     // Read the PDF.
