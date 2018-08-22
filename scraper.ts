@@ -240,7 +240,7 @@ function parseApplicationElements(elements: Element[], informationUrl: string) {
 
 // Parses an image (from a PDF file).
 
-async function parseImage(image: any, bounds: Rectangle,  scaleFactor: number) {
+async function parseImage(image: any, bounds: Rectangle, scaleFactor: number) {
     // Convert the image data into a format that can be used by jimp.
 
     let pixelSize = (8 * image.data.length) / (image.width * image.height);
@@ -298,7 +298,7 @@ async function parseImage(image: any, bounds: Rectangle,  scaleFactor: number) {
 }
 
 async function parsePdf(url: string) {
-    let scaleFactor = 4.0;
+    let scaleFactor = 3.0;
     let developmentApplications = [];
 
     // Read the PDF.
