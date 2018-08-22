@@ -299,7 +299,7 @@ async function parseImage(image: any, bounds: Rectangle, scaleFactor: number) {
 }
 
 async function parsePdf(url: string) {
-    let scaleFactor = 2.0;
+    let scaleFactor = 1.0;
     let developmentApplications = [];
 
     // Read the PDF.
