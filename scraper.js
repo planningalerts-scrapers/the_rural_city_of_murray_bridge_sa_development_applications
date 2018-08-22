@@ -228,7 +228,7 @@ async function parseImage(image, bounds, scaleFactor) {
     console.log(lines);
 }
 async function parsePdf(url) {
-    let scaleFactor = 2.0;
+    let scaleFactor = 1.0;
     let developmentApplications = [];
     // Read the PDF.
     let buffer = await request({ url: url, encoding: null, proxy: process.env.MORPH_PROXY });
