@@ -281,8 +281,9 @@ async function parseImage(image: any, bounds: Rectangle, transform: any, scaleFa
     console.log("Composing image.");
     if (bounds !== undefined) {
     console.log(`Scaling width and height ${scaleWidthAndHeight}`);
-        jimpImage.scale(scaleWidthAndHeight, jimp.RESIZE_BEZIER);
-        composedImage.blit(jimpImage, bounds.x, bounds.y, 0, 0, image.width * scaleWidthAndHeight, image.height * scaleWidthAndHeight);
+        jimpImage.scale(bounds.width / image.width, jimp.RESIZE_BEZIER);
+console.log(`Image ${count}: x=${bounds.x}, y=${bounds.y}, width=${bounds.width}, height=${bounds.height}`);
+        composedImage.blit(jimpImage, bounds.x, bounds.y, 0, 0, bounds.width, bounds.height);
     }
 
     let imageBuffer = await (new Promise((resolve, reject) => jimpImage.getBuffer(jimp.MIME_PNG, (error, buffer) => resolve(buffer))));
@@ -365,7 +366,8 @@ async function parsePdf(url: string) {
                     // let workaroundHeight = Math.sqrt(transform[2] * transform[2] + transform[3] * transform[3]);
                     let factor = 1;  // (1 / 0.12);
                     let factorDimensions = 0.24;
-                    bounds = { x: transform[4] * factor, y: (viewportTest.height - transform[5]) * factor, width: image.width, height: image.height };
+                    // bounds = { x: transform[4] * factor, y: (viewportTest.height - transform[5]) * factor, width: image.width, height: image.height };
+                    bounds = { x: transform[4], y: (1000 - transform[5] - transform[3]), width: transform[0], height: transform[3] };
                     console.log(`image[${image.width},${image.height}]: [${bounds.x},${bounds.y},${bounds.width},${bounds.height}]`);
                 }
 
