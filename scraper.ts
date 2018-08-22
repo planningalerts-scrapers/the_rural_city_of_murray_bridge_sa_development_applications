@@ -435,9 +435,10 @@ async function main() {
     
     let pdfUrls: string[] = [];
     for (let element of $("td.uContentListDesc a[href$='.pdf']").get()) {
-        let pdfUrl = new urlparser.URL(element.attribs.href, DevelopmentApplicationsUrl).href;
-        if (!pdfUrls.some(url => url === pdfUrl))  // avoid duplicates
-            pdfUrls.push(pdfUrl);
+        let pdfUrl = new urlparser.URL(element.attribs.href, DevelopmentApplicationsUrl);
+        pdfUrl.protocol = "http";  // force to use HTTP
+        if (!pdfUrls.some(url => url === pdfUrl.href))  // avoid duplicates
+            pdfUrls.push(pdfUrl.href);
     }
 
     if (pdfUrls.length === 0) {
