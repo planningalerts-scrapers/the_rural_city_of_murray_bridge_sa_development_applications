@@ -282,9 +282,18 @@ async function parseImage(image: any, bounds: Rectangle, scaleFactor: number) {
         }
     }
 
+if (global.gc)
+    global.gc();
+
     jimpImage.scale(scaleFactor, jimp.RESIZE_BEZIER);
+if (global.gc)
+    global.gc();
     let imageBuffer = await (new Promise((resolve, reject) => jimpImage.getBuffer(jimp.MIME_PNG, (error, buffer) => resolve(buffer))));
+if (global.gc)
+    global.gc();
     let result: any = await new Promise((resolve, reject) => { tesseract.recognize(imageBuffer).then(function(result) { resolve(result); }) });
+if (global.gc)
+    global.gc();
 
     tesseract.terminate();
     if (global.gc)
@@ -303,7 +312,7 @@ async function parseImage(image: any, bounds: Rectangle, scaleFactor: number) {
 }
 
 async function parsePdf(url: string) {
-    let scaleFactor = 1.0;
+    let scaleFactor = 2.0;
     let developmentApplications = [];
 
     // Read the PDF.
