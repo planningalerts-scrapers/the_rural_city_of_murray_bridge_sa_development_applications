@@ -243,8 +243,8 @@ function parseApplicationElements(elements: Element[], informationUrl: string) {
 async function parseImage(image: any, bounds: Rectangle, scaleFactor: number) {
     // Minimise memory usage.
 
-    if (global.gc)
-        global.gc();
+if (global.gc)
+    global.gc();
 
     // Convert the image data into a format that can be used by jimp.
 
@@ -282,18 +282,14 @@ async function parseImage(image: any, bounds: Rectangle, scaleFactor: number) {
         }
     }
 
+    jimpImage.scale(scaleFactor, jimp.RESIZE_BEZIER);
+    let imageBuffer = await (new Promise((resolve, reject) => jimpImage.getBuffer(jimp.MIME_PNG, (error, buffer) => resolve(buffer))));
+
+jimpImage = undefined;
 if (global.gc)
     global.gc();
 
-    jimpImage.scale(scaleFactor, jimp.RESIZE_BEZIER);
-if (global.gc)
-    global.gc();
-    let imageBuffer = await (new Promise((resolve, reject) => jimpImage.getBuffer(jimp.MIME_PNG, (error, buffer) => resolve(buffer))));
-if (global.gc)
-    global.gc();
     let result: any = await new Promise((resolve, reject) => { tesseract.recognize(imageBuffer).then(function(result) { resolve(result); }) });
-if (global.gc)
-    global.gc();
 
     tesseract.terminate();
     if (global.gc)
