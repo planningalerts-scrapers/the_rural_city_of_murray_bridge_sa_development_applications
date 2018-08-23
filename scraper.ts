@@ -14,7 +14,6 @@ import * as moment from "moment";
 import * as pdfjs from "pdfjs-dist";
 import * as tesseract from "tesseract.js";
 import * as jimp from "jimp";
-import * as pngjs2 from "pngjs2";
 import * as fs from "fs";
 
 sqlite3.verbose();
@@ -35,7 +34,7 @@ async function initializeDatabase() {
     return new Promise((resolve, reject) => {
         let database = new sqlite3.Database("data.sqlite");
         database.serialize(() => {
-            database.run("create table if not exists [data] ([council_reference] text primary key, [address] text, [description] text, [info_url] text, [comment_url] text, [date_scraped] text, [date_received] text, [on_notice_from] text, [on_notice_to] text)");
+            database.run("create table if not exists [data] ([council_reference] text primary key, [address] text, [description] text, [info_url] text, [comment_url] text, [date_scraped] text, [date_received] text)");
             resolve(database);
         });
     });
@@ -45,7 +44,7 @@ async function initializeDatabase() {
 
 async function insertRow(database, developmentApplication) {
     return new Promise((resolve, reject) => {
-        let sqlStatement = database.prepare("insert or ignore into [data] values (?, ?, ?, ?, ?, ?, ?, ?, ?)");
+        let sqlStatement = database.prepare("insert or ignore into [data] values (?, ?, ?, ?, ?, ?, ?)");
         sqlStatement.run([
             developmentApplication.applicationNumber,
             developmentApplication.address,
@@ -53,9 +52,7 @@ async function insertRow(database, developmentApplication) {
             developmentApplication.informationUrl,
             developmentApplication.commentUrl,
             developmentApplication.scrapeDate,
-            developmentApplication.receivedDate,
-            null,
-            null
+            developmentApplication.receivedDate
         ], function(error, row) {
             if (error) {
                 console.error(error);

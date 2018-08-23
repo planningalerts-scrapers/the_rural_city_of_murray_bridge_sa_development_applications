@@ -12,7 +12,6 @@
     "moment": "^2.22.2",
     "path": "^0.12.7",
     "pdfjs-dist": "^2.0.550",
-    "pngjs2": "^2.0.0",
     "request": "^2.87.0",
     "request-promise-native": "^1.0.5",
     "sqlite3": "^4.0.1",
