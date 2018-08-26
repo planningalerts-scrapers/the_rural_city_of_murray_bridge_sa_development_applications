@@ -84,6 +84,15 @@ interface Element extends Rectangle {
     text: string
 }
 
+// Returns the text of the element with all whitespace removed, changed to lowercase and some
+// punctuation removed (for example, the full stop from "Dev App No.").
+
+function condenseText(element: Element) {
+    if (element === undefined || element.text === undefined)
+        return undefined;
+    return element.text.trim().replace(/[\s.,]/g, "").toLowerCase();
+}
+
 // Gets the highest Y co-ordinate of all elements that are considered to be in the same row as
 // the specified element.
 
@@ -117,6 +126,61 @@ function constructUnion(rectangle1: Rectangle, rectangle2: Rectangle): Rectangle
     let y1 = Math.min(rectangle1.y, rectangle2.y);
     let y2 = Math.max(rectangle1.y + rectangle1.height, rectangle2.y + rectangle2.height);
     return { x: x1, y: y1, width: x2 - x1, height: y2 - y1 };
+}
+
+// Calculates the square of the Euclidean distance between two elements.
+
+function calculateDistance(element1: Element, element2: Element) {
+    let point1 = { x: element1.x + element1.width, y: element1.y + element1.height / 2 };
+    let point2 = { x: element2.x, y: element2.y + element2.height / 2 };
+    if (point2.x < point1.x - element1.width / 5)  // arbitrary overlap factor of 20%
+        return Number.MAX_VALUE;
+    return (point2.x - point1.x) * (point2.x - point1.x) + (point2.y - point1.y) * (point2.y - point1.y);
+}
+
+// Determines whether there is vertical overlap between two elements.
+
+function isVerticalOverlap(element1: Element, element2: Element) {
+    return element2.y < element1.y + element1.height && element2.y + element2.height > element1.y;
+}
+
+// Gets the percentage of vertical overlap between two elements (0 means no overlap and 1 means
+// 100% overlap; and, for example, 0.2 means that 20% of the second element overlaps somewhere
+// with the first element).
+
+function getVerticalOverlapPercentage(element1: Element, element2: Element) {
+    let y1 = Math.max(element1.y, element2.y);
+    let y2 = Math.min(element1.y + element1.height, element2.y + element2.height);
+    return (y2 < y1) ? 0 : ((y2 - y1) / element2.height);
+}
+
+// Gets the element immediately to the right of the specified element.
+
+function getRightElement(elements: Element[], element: Element) {
+    let closestElement: Element = { text: undefined, x: Number.MAX_VALUE, y: Number.MAX_VALUE, width: 0, height: 0 };
+    for (let rightElement of elements)
+        if (isVerticalOverlap(element, rightElement) && calculateDistance(element, rightElement) < calculateDistance(element, closestElement))
+            closestElement = rightElement;
+    return (closestElement.text === undefined) ? undefined : closestElement;
+}
+
+// Gets the text to the right of the specified startElement up to the left hand side of the
+// specified middleElement (adjusted left by 20% of the width of the middleElement as a safety
+// precaution).  Only elements that overlap 50% or more in the vertical direction with the
+// specified startElement are considered (ie. elements on the same "row").
+
+function getRightRowText(elements: Element[], startElement: Element, middleElement: Element) {
+    let rowElements = elements.filter(element =>
+        element.x > startElement.x + startElement.width &&
+        element.x < middleElement.x - 0.2 * middleElement.width &&
+        getVerticalOverlapPercentage(element, startElement) > 0.5
+    );
+
+    // Sort and then join the elements into a single string.
+
+    let xComparer = (a: Element, b: Element) => (a.x > b.x) ? 1 : ((a.x < b.x) ? -1 : 0);
+    rowElements.sort(xComparer);
+    return rowElements.map(element => element.text).join(" ").trim().replace(/\s\s+/g, " ");
 }
 
 // Gets the text to the right in a rectangle, where the rectangle is delineated by the positions in
@@ -203,8 +267,56 @@ function getDownText(elements: Element[], topText: string, rightText: string, bo
 
 // Parses the details from the elements associated with a single development application.
 
-function parseApplicationElements(elements: Element[], informationUrl: string) {
-    let applicationNumber = getRightText(elements, "Application No", "Application Date", "Applicants Name");
+function parseApplicationElements(elements: Element[], startElement: Element, informationUrl: string) {
+    // Find the "Assessment Number" text.
+
+    let assessmentElement = elements.find(element => element.y > startElement.y && element.text.trim().toLowerCase().startsWith("assessment"));
+    let assessmentText = condenseText(assessmentElement);
+    if (assessmentText === "assessment") {
+        let assessmentNumberElement = getRightElement(elements, assessmentElement);
+        let assessmentNumberText = condenseText(assessmentNumberElement);
+        if (assessmentNumberText !== "number") {
+            console.log("Could not find the \"Assessment Number\" text on the PDF page for the current development application.  The development application will be ignored.");
+            return undefined;
+        }
+    } else if (assessmentText !== "assessmentnumber") {
+        console.log("Could not find the \"Assessment Number\" text on the PDF page for the current development application.  The development application will be ignored.");
+        return undefined;
+    }
+
+    // Find the "Applicant" text.
+
+    let applicantElement = elements.find(element => element.y > startElement.y && element.text.trim().toLowerCase() === "applicant");
+
+    // Find the "Builder" text.
+
+    let builderElement = elements.find(element => element.y > startElement.y && element.text.trim().toLowerCase() === "builder");
+
+    // One of either the applicant or builder elements is required in order to determine where
+    // the description text starts on the X axis (and where the development application number
+    // and address end on the X axis).
+
+    let middleElement = (applicantElement === undefined) ? builderElement : applicantElement;
+    if (middleElement === undefined) {
+        console.log("Could not find the \"Applicant\" or \"Builder\" text on the PDF page for the current development application.  The development application will be ignored.");
+        return undefined;
+    }
+
+    let applicationNumber = getRightRowText(elements, startElement, middleElement).trim().replace(/\s/g, "");
+    applicationNumber = applicationNumber.replace(/[IlL\[\]\|]/g, "/");  // for example, converts "17I2017" to "17/2017"
+
+    if (applicationNumber === "") {
+        console.log("Could not find the application number on the PDF page for the current development application.  The development application will be ignored.");
+        return undefined;
+    }
+
+    console.log(`Application Number: ${applicationNumber}`);
+    for (let element of elements)
+        console.log(`[${Math.round(element.x)},${Math.round(element.y)}] ${element.text}`);
+    console.log("----------");
+    return [];
+
+    // let applicationNumber = getRightText(elements, "Application No", "Application Date", "Applicants Name");
     let receivedDate = getRightText(elements, "Application Date", "Planning Approval", "Application received");
     let houseNumber = getRightText(elements, "Property House No", "Planning Conditions", "Lot");
     let streetName = getRightText(elements, "Property street", "Planning Conditions", "Property suburb");
@@ -247,15 +359,11 @@ function parseApplicationElements(elements: Element[], informationUrl: string) {
 
 // Parses an image (from a PDF file).
 
-let imageCount = 0;
-
-async function parseImage(image: any, bounds: Rectangle, scaleFactor: number) {
+async function parseImage(image: any, bounds: Rectangle) {
     // Convert the image data into a format that can be used by jimp.
 
     let pixelSize = (8 * image.data.length) / (image.width * image.height);
     let jimpImage = null;
-
-    console.log(`Parsing image ${bounds.x}, ${bounds.y}, ${bounds.width}, ${bounds.height}, scale=${scaleFactor}.`);
 
     if (pixelSize === 1) {
         // A monochrome image (one bit per pixel).
@@ -283,11 +391,7 @@ async function parseImage(image: any, bounds: Rectangle, scaleFactor: number) {
             for (let y = 0; y < image.height; y++) {
                 let index = (y * image.width * 3) + (x * 3);
                 let color = jimp.rgbaToInt(image.data[index], image.data[index + 1], image.data[index + 2], 255);
-                try {
-                    jimpImage.setPixelColor(color, x, y);
-                } catch (ex) {
-                    console.log(`Trying to set pixel x=${x}, y=${y} to colour color=${color}: ${ex.message}`);
-                }
+                jimpImage.setPixelColor(color, x, y);
             }
         }
     }
@@ -304,18 +408,28 @@ async function parseImage(image: any, bounds: Rectangle, scaleFactor: number) {
 
     // Simplify the lines (remove most of the information generated by tesseract.js).
 
-    let lines = [];
+    let elements: Element[] = [];
+
     if (result.blocks && result.blocks.length)
         for (let block of result.blocks)
             for (let paragraph of block.paragraphs)
                 for (let line of paragraph.lines)
-                    lines.push(line.words.map(word => { return { text: word.text, confidence: word.confidence, choices: word.choices.length, bounds: { x: word.bbox.x0 / scaleFactor + bounds.x, y: word.bbox.y0 / scaleFactor + bounds.y, width: (word.bbox.x1 - word.bbox.x0) / scaleFactor, height: (word.bbox.y1 - word.bbox.y0) / scaleFactor } }; }));
+                    elements = elements.concat(line.words.map(word => {
+                        return {
+                            text: word.text,
+                            confidence: word.confidence,
+                            choiceCount: word.choices.length,
+                            x: word.bbox.x0 + bounds.x,
+                            y: word.bbox.y0 + bounds.y,
+                            width: (word.bbox.x1 - word.bbox.x0),
+                            height: (word.bbox.y1 - word.bbox.y0)
+                        };
+                    }));
 
-    return lines;
+    return elements;
 }
 
 async function parsePdf(url: string) {
-    let scaleFactor = 1.0;
     let developmentApplications = [];
 
     // Read the PDF.
@@ -327,7 +441,12 @@ async function parsePdf(url: string) {
 
     let pdf = await pdfjs.getDocument({ data: buffer, disableFontFace: true, ignoreErrors: true });
 
-    for (let index = 0; index < pdf.numPages; index++) {
+console.log("Only parsing the first few pages for testing purposes.");
+
+console.log("Get \"Records\" from first page and ensure that total is correct.");
+
+    // for (let index = 0; index < pdf.numPages; index++) {
+    for (let index = 0; index < 3; index++) {
         console.log(`Page ${index + 1} of ${pdf.numPages}.`);
         let page = await pdf.getPage(index + 1);
         let viewportTest = await page.getViewport(1.0);
@@ -335,8 +454,7 @@ async function parsePdf(url: string) {
 
         // Find and parse any images in the current PDF page.
 
-// Just for testing purposes: reset the development applications on each new page.
-developmentApplications = [];
+        let elements: Element[] = [];
 
         for (let index = 0; index < operators.fnArray.length; index++) {
             if (operators.fnArray[index] !== pdfjs.OPS.paintImageXObject && operators.fnArray[index] !== pdfjs.OPS.paintImageMaskXObject)
@@ -356,7 +474,7 @@ developmentApplications = [];
                 continue;
             }
 
-            // Process the image.
+            // Parse the text from the image.
 
             let bounds = {
                 x: (transform[4] * image.height) / transform[3],
@@ -365,79 +483,78 @@ developmentApplications = [];
                 height: image.height
             };
 
-            console.log(`Parsing the image at [${Math.round(bounds.x)}, ${Math.round(bounds.y)}] with size ${bounds.width}×${bounds.height}.`);
-            let imageDevelopmentApplications = await parseImage(image, bounds, scaleFactor);
-            developmentApplications = developmentApplications.concat(imageDevelopmentApplications);
+            elements = elements.concat(await parseImage(image, bounds));
         }
-
-        // word should inherit from Rectangle.
-
-        // Construct an image to check if it has been correctly recognised.
-
-        console.log("Construcing image from lines and words.");
-
-        let composedImage: any = await new Promise((resolve, reject) => new (jimp as any)(3000, 5000, (error, image) => error ? reject(error) : resolve(image)));
-        let font = await (jimp as any).loadFont(jimp.FONT_SANS_16_BLACK);
-    
-        for (let line of developmentApplications) {
-            let lineBounds: Rectangle = { x: line[0].bounds.x, y: line[0].bounds.y, width: line[0].bounds.width, height: line[0].bounds.height };
-            for (let word of line)
-                lineBounds = constructUnion(lineBounds, { x: word.bounds.x, y: word.bounds.y, width: word.bounds.width, height: word.bounds.height });
-            console.log(lineBounds);
-            let lineImage = new (jimp as any)(Math.round(lineBounds.width), Math.round(lineBounds.height), 0x776677ff);
-            composedImage.blit(lineImage, lineBounds.x, lineBounds.y, 0, 0, lineBounds.width, lineBounds.height);
-
-            console.log("Stepping through words of the current line.");
-            for (let word of line) {
-                let wordImage = new (jimp as any)(Math.round(word.bounds.width), Math.round(word.bounds.height), 0xeeddeeff);
-                composedImage.blit(wordImage, word.bounds.x, word.bounds.y, 0, 0, word.bounds.width, word.bounds.height);
-                composedImage.print(font, word.bounds.x, word.bounds.y, word.text);
-            }
-        }
-
-        imageCount++;
-        composedImage.write(`C:\\Temp\\Murray Bridge\\Recognised Word Rectangles.Page${imageCount}.png`);
-
-        // Construct a text element for each item from the parsed PDF information.
-
-        let textContent = await page.getTextContent();
-        let viewport = await page.getViewport(1.0);
-        let elements: Element[] = textContent.items.map(item => {
-            let transform = pdfjs.Util.transform(viewport.transform, item.transform, [ 1, 0, 0, -1, 0, 0 ]);
-            
-            // Work around the issue https://github.com/mozilla/pdf.js/issues/8276 (heights are
-            // exaggerated).  The problem seems to be that the height value is too large in some
-            // PDFs.  Provide an alternative, more accurate height value by using a calculation
-            // based on the transform matrix.
-
-            let workaroundHeight = Math.sqrt(transform[2] * transform[2] + transform[3] * transform[3]);
-            return { text: item.str, x: transform[4], y: transform[5], width: item.width, height: workaroundHeight };
-        })
         
-        // Group the elements into sections based on where the "Application No" text starts (and
-        // any other element the "Application No" element lines up with horizontally).
+        // Sort the elements by Y co-ordinate and then by X co-ordinate.
 
-        let startElements = elements.filter(element => element.text.trim().startsWith("Application No"));
+        let elementComparer = (a, b) => (a.y > b.y) ? 1 : ((a.y < b.y) ? -1 : ((a.x > b.x) ? 1 : ((a.x < b.x) ? -1 : 0)));
+        elements.sort(elementComparer);
+
+        // Group the elements into sections based on where the "Dev App No." text starts (and
+        // any other element the "Dev Ap No." elements line up with horizontally with a margin
+        // of error equal to about the height of the "Dev App No." text; in order to capture the
+        // lodged date, which may be higher up than the "Dev App No." text).
+
+        let startElements: Element[] = [];
+        for (let startElement of elements.filter(element => element.text.trim().toLowerCase().startsWith("dev"))) {
+            // Check that the elements next to "Dev" produce the text "Dev App No.".  Take care
+            // as the text may possibly be spread across one, two or three elements (allow for
+            // all these possibilities).
+
+            let startText = condenseText(startElement);
+            if (startText === "dev") {
+                startElement = getRightElement(elements, startElement);
+                startText = condenseText(startElement);
+                if (startText === "app") {
+                    startElement = getRightElement(elements, startElement);
+                    startText = condenseText(startElement);
+                    if (startText !== "no")
+                        continue;  // not "Dev App No."
+                } else if (startText !== "appno") {
+                    continue;  // not "Dev App No."
+                }
+            } else if (startText === "devapp") {
+                startElement = getRightElement(elements, startElement);
+                startText = condenseText(startElement);
+                if (startText !== "no")
+                    continue; // not "Dev App No."
+            } else if (startText !== "devappno") {
+                continue;  // not "Dev App No."
+            }
+
+            startElements.push(startElement);
+        }
+
         let yComparer = (a, b) => (a.y > b.y) ? 1 : ((a.y < b.y) ? -1 : 0);
         startElements.sort(yComparer);
 
-        let applicationElementGroups: Element[][] = [];
+        let applicationElementGroups = [];
         for (let index = 0; index < startElements.length; index++) {
             // Determine the highest Y co-ordinate of this row and the next row (or the bottom of
-            // the current page).
+            // the current page).  Allow some leeway vertically (add some extra height) because
+            // in some cases the lodged date is a fair bit higher up than the "Dev App No." text.
 
-            let rowTop = getRowTop(elements, startElements[index]);
+            let startElement = startElements[index];
+            let raisedStartElement: Element = {
+                text: startElement.text,
+                x: startElement.x,
+                y: startElement.y - 2 * startElement.height,  // leeway
+                width: startElement.width,
+                height: startElement.height };
+            let rowTop = getRowTop(elements, raisedStartElement);
             let nextRowTop = (index + 1 < startElements.length) ? getRowTop(elements, startElements[index + 1]) : Number.MAX_VALUE;
 
             // Extract all elements between the two rows.
 
-            applicationElementGroups.push(elements.filter(element => element.y >= rowTop && element.y + element.height < nextRowTop));
+            applicationElementGroups.push({ startElement: startElements[index], elements: elements.filter(element => element.y >= rowTop && element.y + element.height < nextRowTop) });
         }
 
-        // Parse the development application from each section.
+        // Parse the development application from each group of elements (ie. a section of the
+        // current page of the PDF document).
 
-        for (let applicationElements of applicationElementGroups) {
-            let developmentApplication = parseApplicationElements(applicationElements, url);
+        for (let applicationElementGroup of applicationElementGroups) {
+            let developmentApplication = parseApplicationElements(applicationElementGroup.elements, applicationElementGroup.startElement, url);
             if (developmentApplication !== undefined)
                 developmentApplications.push(developmentApplication);
         }
@@ -503,7 +620,7 @@ async function main() {
     if (getRandom(0, 2) === 0)
         selectedPdfUrls.reverse();
 
-selectedPdfUrls = [ "http://www.murraybridge.sa.gov.au/webdata/resources/files/Crystal%20Report%20-%20DevApp%20July%202018.pdf", "http://www.murraybridge.sa.gov.au/webdata/resources/files/Crystal%20Report%20-%20DevApp%20February%202017.pdf" ];
+// selectedPdfUrls = [ "http://www.murraybridge.sa.gov.au/webdata/resources/files/Crystal%20Report%20-%20DevApp%20July%202018.pdf", "http://www.murraybridge.sa.gov.au/webdata/resources/files/Crystal%20Report%20-%20DevApp%20February%202017.pdf" ];
 // selectedPdfUrls = [ "http://www.murraybridge.sa.gov.au/webdata/resources/files/Crystal%20Report%20-%20DevApp%20July%202018.pdf" ];
 selectedPdfUrls = [ "http://www.murraybridge.sa.gov.au/webdata/resources/files/Crystal%20Report%20-%20DevApp%20February%202017.pdf" ];
 
@@ -518,8 +635,8 @@ selectedPdfUrls = [ "http://www.murraybridge.sa.gov.au/webdata/resources/files/C
         if (global.gc)
             global.gc();
 
-//        for (let developmentApplication of developmentApplications)
-//            await insertRow(database, developmentApplication);
+        for (let developmentApplication of developmentApplications)
+            await insertRow(database, developmentApplication);
     }
 }
 
