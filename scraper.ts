@@ -109,6 +109,16 @@ function constructIntersection(rectangle1: Rectangle, rectangle2: Rectangle): Re
         return { x: 0, y: 0, width: 0, height: 0 };
 }
 
+// Constructs a rectangle based on the union of the two specified rectangles.
+
+function constructUnion(rectangle1: Rectangle, rectangle2: Rectangle): Rectangle {
+    let x1 = Math.min(rectangle1.x, rectangle2.x);
+    let x2 = Math.max(rectangle1.x + rectangle1.width, rectangle2.x + rectangle2.width);
+    let y1 = Math.min(rectangle1.y, rectangle2.y);
+    let y2 = Math.max(rectangle1.y + rectangle1.height, rectangle2.y + rectangle2.height);
+    return { x: x1, y: y1, width: x2 - x1, height: y2 - y1 };
+}
+
 // Gets the text to the right in a rectangle, where the rectangle is delineated by the positions in
 // which the three specified strings of (case sensitive) text are found.
 
@@ -237,11 +247,15 @@ function parseApplicationElements(elements: Element[], informationUrl: string) {
 
 // Parses an image (from a PDF file).
 
+let imageCount = 0;
+
 async function parseImage(image: any, bounds: Rectangle, scaleFactor: number) {
     // Convert the image data into a format that can be used by jimp.
 
     let pixelSize = (8 * image.data.length) / (image.width * image.height);
     let jimpImage = null;
+
+    console.log(`Parsing image ${bounds.x}, ${bounds.y}, ${bounds.width}, ${bounds.height}, scale=${scaleFactor}.`);
 
     if (pixelSize === 1) {
         // A monochrome image (one bit per pixel).
@@ -269,15 +283,20 @@ async function parseImage(image: any, bounds: Rectangle, scaleFactor: number) {
             for (let y = 0; y < image.height; y++) {
                 let index = (y * image.width * 3) + (x * 3);
                 let color = jimp.rgbaToInt(image.data[index], image.data[index + 1], image.data[index + 2], 255);
-                jimpImage.setPixelColor(color, x, y);
+                try {
+                    jimpImage.setPixelColor(color, x, y);
+                } catch (ex) {
+                    console.log(`Trying to set pixel x=${x}, y=${y} to colour color=${color}: ${ex.message}`);
+                }
             }
         }
     }
+        
+    // Note that textord_old_baselines is set to 0 so that text that is offset by half the height
+    // of the the font is correctly recognised.
 
-    jimpImage.scale(scaleFactor, jimp.RESIZE_BEZIER);
-    let imageBuffer = await (new Promise((resolve, reject) => jimpImage.getBuffer(jimp.MIME_PNG, (error, buffer) => resolve(buffer))));
-
-    let result: any = await new Promise((resolve, reject) => { tesseract.recognize(imageBuffer).then(function(result) { resolve(result); }) });
+    let imageBuffer = await new Promise((resolve, reject) => jimpImage.getBuffer(jimp.MIME_PNG, (error, buffer) => error ? reject(error) : resolve(buffer)));
+    let result: any = await new Promise((resolve, reject) => { tesseract.recognize(imageBuffer, { textord_old_baselines: "0" }).then(function(result) { resolve(result); }) });
 
     tesseract.terminate();
     if (global.gc)
@@ -290,9 +309,9 @@ async function parseImage(image: any, bounds: Rectangle, scaleFactor: number) {
         for (let block of result.blocks)
             for (let paragraph of block.paragraphs)
                 for (let line of paragraph.lines)
-                    lines.push(line.words.map(word => { return { text: word.text, confidence: word.confidence, choices: word.choices.length, bounds: { x: word.bbox.x0 + bounds.x, y: word.bbox.y0 + bounds.y, width: word.bbox.x1 - word.bbox.x0, height: word.bbox.y1 - word.bbox.y0 } }; }));
+                    lines.push(line.words.map(word => { return { text: word.text, confidence: word.confidence, choices: word.choices.length, bounds: { x: word.bbox.x0 / scaleFactor + bounds.x, y: word.bbox.y0 / scaleFactor + bounds.y, width: (word.bbox.x1 - word.bbox.x0) / scaleFactor, height: (word.bbox.y1 - word.bbox.y0) / scaleFactor } }; }));
 
-    console.log(lines);
+    return lines;
 }
 
 async function parsePdf(url: string) {
@@ -315,6 +334,9 @@ async function parsePdf(url: string) {
         let operators = await page.getOperatorList();
 
         // Find and parse any images in the current PDF page.
+
+// Just for testing purposes: reset the development applications on each new page.
+developmentApplications = [];
 
         for (let index = 0; index < operators.fnArray.length; index++) {
             if (operators.fnArray[index] !== pdfjs.OPS.paintImageXObject && operators.fnArray[index] !== pdfjs.OPS.paintImageMaskXObject)
@@ -348,8 +370,34 @@ async function parsePdf(url: string) {
             developmentApplications = developmentApplications.concat(imageDevelopmentApplications);
         }
 
-return [];
-        
+        // word should inherit from Rectangle.
+
+        // Construct an image to check if it has been correctly recognised.
+
+        console.log("Construcing image from lines and words.");
+
+        let composedImage: any = await new Promise((resolve, reject) => new (jimp as any)(3000, 5000, (error, image) => error ? reject(error) : resolve(image)));
+        let font = await (jimp as any).loadFont(jimp.FONT_SANS_16_BLACK);
+    
+        for (let line of developmentApplications) {
+            let lineBounds: Rectangle = { x: line[0].bounds.x, y: line[0].bounds.y, width: line[0].bounds.width, height: line[0].bounds.height };
+            for (let word of line)
+                lineBounds = constructUnion(lineBounds, { x: word.bounds.x, y: word.bounds.y, width: word.bounds.width, height: word.bounds.height });
+            console.log(lineBounds);
+            let lineImage = new (jimp as any)(Math.round(lineBounds.width), Math.round(lineBounds.height), 0x776677ff);
+            composedImage.blit(lineImage, lineBounds.x, lineBounds.y, 0, 0, lineBounds.width, lineBounds.height);
+
+            console.log("Stepping through words of the current line.");
+            for (let word of line) {
+                let wordImage = new (jimp as any)(Math.round(word.bounds.width), Math.round(word.bounds.height), 0xeeddeeff);
+                composedImage.blit(wordImage, word.bounds.x, word.bounds.y, 0, 0, word.bounds.width, word.bounds.height);
+                composedImage.print(font, word.bounds.x, word.bounds.y, word.text);
+            }
+        }
+
+        imageCount++;
+        composedImage.write(`C:\\Temp\\Murray Bridge\\Recognised Word Rectangles.Page${imageCount}.png`);
+
         // Construct a text element for each item from the parsed PDF information.
 
         let textContent = await page.getTextContent();
@@ -456,6 +504,8 @@ async function main() {
         selectedPdfUrls.reverse();
 
 selectedPdfUrls = [ "http://www.murraybridge.sa.gov.au/webdata/resources/files/Crystal%20Report%20-%20DevApp%20July%202018.pdf", "http://www.murraybridge.sa.gov.au/webdata/resources/files/Crystal%20Report%20-%20DevApp%20February%202017.pdf" ];
+// selectedPdfUrls = [ "http://www.murraybridge.sa.gov.au/webdata/resources/files/Crystal%20Report%20-%20DevApp%20July%202018.pdf" ];
+selectedPdfUrls = [ "http://www.murraybridge.sa.gov.au/webdata/resources/files/Crystal%20Report%20-%20DevApp%20February%202017.pdf" ];
 
     for (let pdfUrl of selectedPdfUrls) {
         console.log(`Parsing document: ${pdfUrl}`);
