@@ -144,14 +144,14 @@ function isVerticalOverlap(element1: Element, element2: Element) {
     return element2.y < element1.y + element1.height && element2.y + element2.height > element1.y;
 }
 
-// Gets the percentage of vertical overlap between two elements (0 means no overlap and 1 means
-// 100% overlap; and, for example, 0.2 means that 20% of the second element overlaps somewhere
+// Gets the percentage of vertical overlap between two elements (0 means no overlap and 100 means
+// 100% overlap; and, for example, 20 means that 20% of the second element overlaps somewhere
 // with the first element).
 
 function getVerticalOverlapPercentage(element1: Element, element2: Element) {
     let y1 = Math.max(element1.y, element2.y);
     let y2 = Math.min(element1.y + element1.height, element2.y + element2.height);
-    return (y2 < y1) ? 0 : ((y2 - y1) / element2.height);
+    return (y2 < y1) ? 0 : (((y2 - y1) * 100) / element2.height);
 }
 
 // Gets the element immediately to the right of the specified element.
@@ -173,7 +173,7 @@ function getRightRowText(elements: Element[], startElement: Element, middleEleme
     let rowElements = elements.filter(element =>
         element.x > startElement.x + startElement.width &&
         element.x < middleElement.x - 0.2 * middleElement.width &&
-        getVerticalOverlapPercentage(element, startElement) > 0.5
+        getVerticalOverlapPercentage(element, startElement) > 50
     );
 
     // Sort and then join the elements into a single string.
@@ -325,11 +325,38 @@ function parseApplicationElements(elements: Element[], startElement: Element, in
     // Select the left most date (ie. favour the "lodged" date over the "final descision" date).
 
     let receivedDate: moment.Moment = undefined;
-    let leftmostDateElement = dateElements.reduce((previous, current) => ((previous === undefined || previous.x > current.x) ? current : previous), undefined);
-    if (leftmostDateElement !== undefined)
-        receivedDate = moment(leftmostDateElement.text.trim(), "D/MM/YYYY", true);
+    let receivedDateElement = dateElements.reduce((previous, current) => ((previous === undefined || previous.x > current.x) ? current : previous), undefined);
+    if (receivedDateElement !== undefined)
+        receivedDate = moment(receivedDateElement.text.trim(), "D/MM/YYYY", true);
     
     console.log(`Received Date: ${receivedDate.isValid() ? receivedDate.format("YYYY-MM-DD") : ""}`)
+
+    // Set the element which delineates the top of the description text.
+
+    let descriptionTopElement = (receivedDateElement === null) ? startElement : receivedDateElement;
+
+    // Set the element which delineates the bottom left of the description text.
+
+    let descriptionBottomLeftElement = middleElement;
+
+    // Extract the description text.
+
+    let descriptionElements = elements.filter(element =>
+        element.y > descriptionTopElement.y + descriptionTopElement.height &&
+        element.y < descriptionBottomLeftElement.y &&
+        element.x > descriptionBottomLeftElement.x - 0.2 * descriptionBottomLeftElement.width);
+
+    // Sort the description elements by Y co-ordinate and then by X co-ordinate (the Math.max
+    // expressions exist to allow for the Y co-ordinates of elements to be not exactly aligned;
+    // for example, hyphens in text such as "Retail Fitout - Shop 7").
+
+    let elementComparer = (a, b) => (a.y > b.y + Math.max(a.height, b.height)) ? 1 : ((a.y < b.y - Math.max(a.height, b.height)) ? -1 : ((a.x > b.x) ? 1 : ((a.x < b.x) ? -1 : 0)));
+    descriptionElements.sort(elementComparer);
+
+    // Construct the description from the elements.
+
+    let description = descriptionElements.map(element => element.text).join(" ").trim().replace(/\s\s+/g, " ");
+    console.log(`Description: ${description}`);
 
     // for (let element of elements)
     //     console.log(`[${Math.round(element.x)},${Math.round(element.y)}] ${element.text}`);
@@ -341,7 +368,7 @@ function parseApplicationElements(elements: Element[], startElement: Element, in
     let houseNumber = getRightText(elements, "Property House No", "Planning Conditions", "Lot");
     let streetName = getRightText(elements, "Property street", "Planning Conditions", "Property suburb");
     let suburbName = getRightText(elements, "Property suburb", "Planning Conditions", "Title");
-    let description = getDownText(elements, "Development Description", "Relevant Authority", undefined);
+    // let description = getDownText(elements, "Development Description", "Relevant Authority", undefined);
 
     let address = "";
     if (houseNumber !== undefined)
@@ -489,10 +516,8 @@ console.log("Get \"Records\" from first page and ensure that total is correct.")
             // Obtain the transform that applies to the image.
 
             let transform = (index - 1 >= 0 && operators.fnArray[index - 1] === pdfjs.OPS.transform) ? operators.argsArray[index - 1] : undefined;
-            if (transform === undefined) {
-                console.log(`Could not find a transform to apply to the image with size ${image.width}×${image.height}.  Any text in the image will be ignored.`);
+            if (transform === undefined)  // a transform is needed
                 continue;
-            }
 
             // Parse the text from the image.
 
