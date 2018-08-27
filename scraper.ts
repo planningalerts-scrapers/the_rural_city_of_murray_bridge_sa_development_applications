@@ -353,10 +353,45 @@ function parseApplicationElements(elements: Element[], startElement: Element, in
     let elementComparer = (a, b) => (a.y > b.y + Math.max(a.height, b.height)) ? 1 : ((a.y < b.y - Math.max(a.height, b.height)) ? -1 : ((a.x > b.x) ? 1 : ((a.x < b.x) ? -1 : 0)));
     descriptionElements.sort(elementComparer);
 
-    // Construct the description from the elements.
+    // Construct the description from the description elements.
 
     let description = descriptionElements.map(element => element.text).join(" ").trim().replace(/\s\s+/g, " ");
     console.log(`Description: ${description}`);
+
+    // Find the elements above (at least a "line" above) the "Assessment Number" text and to the
+    // left of the middleElement.  These elements correspond to the address (assumed to be on one
+    // single line).
+
+    let addressElements = elements.filter(element =>
+        element.y < assessmentElement.y - assessmentElement.height &&
+        element.x < middleElement.x);
+
+    // Find the lowest address element (this is assumed to form part of the single line of the
+    // address).
+
+    let addressBottomElement = addressElements.reduce((previous, current) => ((previous === undefined || current.y > previous.y) ? current : previous), undefined);
+    if (addressBottomElement === undefined) {
+        console.log(`Application number ${applicationNumber} will be ignored because an address was not found (searching upwards from the "Assessment Number" text).`);
+        return undefined;
+    }
+
+    // Obtain all elements on the same "line" as the lowest address element.
+
+    addressElements = elements.filter(element =>
+        element.y < assessmentElement.y - assessmentElement.height &&
+        element.x < middleElement.x &&
+        element.y >= addressBottomElement.y - Math.max(element.height, addressBottomElement.height));
+
+    // Sort the address elements by Y co-ordinate and then by X co-ordinate (the Math.max
+    // expressions exist to allow for the Y co-ordinates of elements to be not exactly aligned).
+
+    elementComparer = (a, b) => (a.y > b.y + Math.max(a.height, b.height)) ? 1 : ((a.y < b.y - Math.max(a.height, b.height)) ? -1 : ((a.x > b.x) ? 1 : ((a.x < b.x) ? -1 : 0)));
+    addressElements.sort(elementComparer);
+
+    // Construct the address from the discovered address elements.
+
+    let address = addressElements.map(element => element.text).join(" ").trim().replace(/\s\s+/g, " ");
+    console.log(`Address: ${address}`);
 
     // for (let element of elements)
     //     console.log(`[${Math.round(element.x)},${Math.round(element.y)}] ${element.text}`);
@@ -370,7 +405,8 @@ function parseApplicationElements(elements: Element[], startElement: Element, in
     let suburbName = getRightText(elements, "Property suburb", "Planning Conditions", "Title");
     // let description = getDownText(elements, "Development Description", "Relevant Authority", undefined);
 
-    let address = "";
+    // let address = "";
+
     if (houseNumber !== undefined)
         address += houseNumber.trim();
     if (streetName !== undefined)
@@ -493,7 +529,7 @@ console.log("Only parsing the first few pages for testing purposes.");
 console.log("Get \"Records\" from first page and ensure that total is correct.");
 
     // for (let index = 0; index < pdf.numPages; index++) {
-    for (let index = 0; index < 3; index++) {
+    for (let index = 0; index < 4; index++) {
         console.log(`Page ${index + 1} of ${pdf.numPages}.`);
         let page = await pdf.getPage(index + 1);
         let viewportTest = await page.getViewport(1.0);
