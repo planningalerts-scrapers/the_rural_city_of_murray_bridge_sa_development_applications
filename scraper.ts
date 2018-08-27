@@ -393,6 +393,8 @@ function parseApplicationElements(elements: Element[], startElement: Element, in
     let address = addressElements.map(element => element.text).join(" ").trim().replace(/\s\s+/g, " ");
     console.log(`Address: ${address}`);
 
+    // Do replacement of ﬁ with "fi"
+
     // for (let element of elements)
     //     console.log(`[${Math.round(element.x)},${Math.round(element.y)}] ${element.text}`);
     console.log("----------");
@@ -529,7 +531,7 @@ console.log("Only parsing the first few pages for testing purposes.");
 console.log("Get \"Records\" from first page and ensure that total is correct.");
 
     // for (let index = 0; index < pdf.numPages; index++) {
-    for (let index = 0; index < 4; index++) {
+    for (let index = 4; index < 10; index++) {
         console.log(`Page ${index + 1} of ${pdf.numPages}.`);
         let page = await pdf.getPage(index + 1);
         let viewportTest = await page.getViewport(1.0);
