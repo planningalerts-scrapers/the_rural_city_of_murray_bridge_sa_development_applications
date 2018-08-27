@@ -311,13 +311,33 @@ function parseApplicationElements(elements: Element[], startElement: Element, in
     }
 
     console.log(`Application Number: ${applicationNumber}`);
-    for (let element of elements)
-        console.log(`[${Math.round(element.x)},${Math.round(element.y)}] ${element.text}`);
+
+    // Search to the right of "Dev App No." for the lodged date (including up and down a few
+    // "lines" from the "Dev App No." text because sometimes the lodged date is offset vertically
+    // by a fair amount; in some cases offset up and in other cases offset down).
+
+    let dateElements = elements.filter(element =>
+        element.x >= middleElement.x &&
+        element.y + element.height > startElement.y - startElement.height &&
+        element.y < startElement.y + 2 * startElement.height &&
+        moment(element.text.trim(), "D/MM/YYYY", true).isValid());
+
+    // Select the left most date (ie. favour the "lodged" date over the "final descision" date).
+
+    let receivedDate: moment.Moment = undefined;
+    let leftmostDateElement = dateElements.reduce((previous, current) => ((previous === undefined || previous.x > current.x) ? current : previous), undefined);
+    if (leftmostDateElement !== undefined)
+        receivedDate = moment(leftmostDateElement.text.trim(), "D/MM/YYYY", true);
+    
+    console.log(`Received Date: ${receivedDate.isValid() ? receivedDate.format("YYYY-MM-DD") : ""}`)
+
+    // for (let element of elements)
+    //     console.log(`[${Math.round(element.x)},${Math.round(element.y)}] ${element.text}`);
     console.log("----------");
     return [];
 
     // let applicationNumber = getRightText(elements, "Application No", "Application Date", "Applicants Name");
-    let receivedDate = getRightText(elements, "Application Date", "Planning Approval", "Application received");
+    // let receivedDate = getRightText(elements, "Application Date", "Planning Approval", "Application received");
     let houseNumber = getRightText(elements, "Property House No", "Planning Conditions", "Lot");
     let streetName = getRightText(elements, "Property street", "Planning Conditions", "Property suburb");
     let suburbName = getRightText(elements, "Property suburb", "Planning Conditions", "Title");
