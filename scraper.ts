@@ -14,6 +14,7 @@ import * as moment from "moment";
 import * as pdfjs from "pdfjs-dist";
 import * as tesseract from "tesseract.js";
 import * as jimp from "jimp";
+import * as didyoumean from "didyoumean2";
 import * as fs from "fs";
 
 sqlite3.verbose();
@@ -268,18 +269,35 @@ function getDownText(elements: Element[], topText: string, rightText: string, bo
 // Parses the details from the elements associated with a single development application.
 
 function parseApplicationElements(elements: Element[], startElement: Element, informationUrl: string) {
-    // Find the "Assessment Number" text.
+    console.log("----------Elements for one Application----------");
+    for (let element of elements)
+        console.log(`    [${element.text}] (${Math.round(element.x)},${Math.round(element.y)}) ${element.width}×${element.height} confidence=${Math.round((element as any).confidence)}%`);
 
-    let assessmentElement = elements.find(element => element.y > startElement.y && element.text.trim().toLowerCase().startsWith("assessment"));
-    let assessmentText = condenseText(assessmentElement);
-    if (assessmentText === "assessment") {
-        let assessmentNumberElement = getRightElement(elements, assessmentElement);
-        let assessmentNumberText = condenseText(assessmentNumberElement);
-        if (assessmentNumberText !== "number") {
-            console.log("Could not find the \"Assessment Number\" text on the PDF page for the current development application.  The development application will be ignored.");
-            return undefined;
+    // Find the "Assessment Number" text (allowing for spelling errors).
+
+    let assessmentNumberElement = elements.find(element =>
+        element.y > startElement.y &&
+        didyoumean(element.text, [ "Assessment Number" ], { caseSensitive: false, returnType: "first-closest-match", thresholdType: "edit-distance", threshold: 2, trimSpace: true }) !== null);
+    
+    if (assessmentNumberElement === undefined) {
+        // Find any occurrences of the text "Assessment".
+
+        let assessmentElements = elements.filter(
+            element => element.y > startElement.y &&
+            didyoumean(element.text, [ "Assessment" ], { caseSensitive: false, returnType: "first-closest-match", thresholdType: "edit-distance", threshold: 2, trimSpace: true }) !== null);
+
+        // Check if any of those occurrences of "Assessment" are followed by "Number".
+
+        for (let assessmentElement of assessmentElements) {
+            let assessmentRightElement = getRightElement(elements, assessmentElement);
+            if (assessmentRightElement !== null && didyoumean(assessmentRightElement.text, [ "Number" ], { caseSensitive: false, returnType: "first-closest-match", thresholdType: "edit-distance", threshold: 2, trimSpace: true }) !== null) {
+                assessmentNumberElement = assessmentElement;
+                break;
+            }
         }
-    } else if (assessmentText !== "assessmentnumber") {
+    }
+
+    if (assessmentNumberElement === undefined) {
         console.log("Could not find the \"Assessment Number\" text on the PDF page for the current development application.  The development application will be ignored.");
         return undefined;
     }
@@ -350,12 +368,12 @@ function parseApplicationElements(elements: Element[], startElement: Element, in
     // expressions exist to allow for the Y co-ordinates of elements to be not exactly aligned;
     // for example, hyphens in text such as "Retail Fitout - Shop 7").
 
-    let elementComparer = (a, b) => (a.y > b.y + Math.max(a.height, b.height)) ? 1 : ((a.y < b.y - Math.max(a.height, b.height)) ? -1 : ((a.x > b.x) ? 1 : ((a.x < b.x) ? -1 : 0)));
+    let elementComparer = (a, b) => (a.y > b.y + (Math.max(a.height, b.height) * 2) / 3) ? 1 : ((a.y < b.y - (Math.max(a.height, b.height) * 2) / 3) ? -1 : ((a.x > b.x) ? 1 : ((a.x < b.x) ? -1 : 0)));
     descriptionElements.sort(elementComparer);
 
     // Construct the description from the description elements.
 
-    let description = descriptionElements.map(element => element.text).join(" ").trim().replace(/\s\s+/g, " ");
+    let description = descriptionElements.map(element => element.text).join(" ").trim().replace(/\s\s+/g, " ").replace(/ﬁ/g, "fi").replace(/ﬂ/g, "fl");
     console.log(`Description: ${description}`);
 
     // Find the elements above (at least a "line" above) the "Assessment Number" text and to the
@@ -363,7 +381,7 @@ function parseApplicationElements(elements: Element[], startElement: Element, in
     // single line).
 
     let addressElements = elements.filter(element =>
-        element.y < assessmentElement.y - assessmentElement.height &&
+        element.y < assessmentNumberElement.y - assessmentNumberElement.height &&
         element.x < middleElement.x);
 
     // Find the lowest address element (this is assumed to form part of the single line of the
@@ -378,7 +396,7 @@ function parseApplicationElements(elements: Element[], startElement: Element, in
     // Obtain all elements on the same "line" as the lowest address element.
 
     addressElements = elements.filter(element =>
-        element.y < assessmentElement.y - assessmentElement.height &&
+        element.y < assessmentNumberElement.y - assessmentNumberElement.height &&
         element.x < middleElement.x &&
         element.y >= addressBottomElement.y - Math.max(element.height, addressBottomElement.height));
 
@@ -390,10 +408,8 @@ function parseApplicationElements(elements: Element[], startElement: Element, in
 
     // Construct the address from the discovered address elements.
 
-    let address = addressElements.map(element => element.text).join(" ").trim().replace(/\s\s+/g, " ");
+    let address = addressElements.map(element => element.text).join(" ").trim().replace(/\s\s+/g, " ").replace(/ﬁ/g, "fi").replace(/ﬂ/g, "fl");
     console.log(`Address: ${address}`);
-
-    // Do replacement of ﬁ with "fi"
 
     // for (let element of elements)
     //     console.log(`[${Math.round(element.x)},${Math.round(element.y)}] ${element.text}`);
@@ -530,8 +546,7 @@ console.log("Only parsing the first few pages for testing purposes.");
 
 console.log("Get \"Records\" from first page and ensure that total is correct.");
 
-    // for (let index = 0; index < pdf.numPages; index++) {
-    for (let index = 4; index < 10; index++) {
+    for (let index = 0; index < pdf.numPages; index++) {
         console.log(`Page ${index + 1} of ${pdf.numPages}.`);
         let page = await pdf.getPage(index + 1);
         let viewportTest = await page.getViewport(1.0);
