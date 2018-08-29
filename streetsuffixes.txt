@@ -1,0 +1,15 @@
+Av,Avenue
+Bvd,Boulevard
+Cir,Circuit
+Cr,Crescent
+Ct,Court
+Dr,Drive
+Hwy,Highway
+La,Lane
+Pl,Place
+Rd,Road
+Sq,Square
+St,Street
+Tce,Terrace
+Tr,Track
+Wy,Way

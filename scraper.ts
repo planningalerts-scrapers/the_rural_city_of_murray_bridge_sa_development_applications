@@ -25,9 +25,11 @@ const CommentUrl = "mailto:council@murraybridge.sa.gov.au";
 declare const global: any;
 declare const process: any;
 
-// All valid suburb names.
+// All valid street and suburb names.
 
 let SuburbNames = null;
+let StreetSuffixes = null;
+let StreetNames = null;
 
 // Sets up an sqlite database.
 
@@ -225,6 +227,75 @@ function getRightText(elements: Element[], topLeftText: string, rightText: strin
     return intersectingElements.map(element => element.text).join(" ").trim().replace(/\s\s+/g, " ");
 }
 
+// Reads all the address information into global objects.
+
+function readAddressInformation() {
+    StreetNames = {}
+    for (let line of fs.readFileSync("streetnames.txt").toString().replace(/\r/g, "").trim().split("\n")) {
+        let streetNameTokens = line.split(",");
+        let streetName = streetNameTokens[0].trim().toLowerCase();
+        let suburbName = streetNameTokens[1].trim();
+        if (StreetNames[streetName] === undefined)
+            StreetNames[streetName] = [];
+        StreetNames[streetName].push(suburbName);  // several suburbs may exist for the same street name
+    }
+
+    StreetSuffixes = {};
+    for (let line of fs.readFileSync("streetsuffixes.txt").toString().replace(/\r/g, "").trim().split("\n")) {
+        let streetSuffixTokens = line.split(",");
+        StreetSuffixes[streetSuffixTokens[0].trim().toLowerCase()] = streetSuffixTokens[1].trim();
+    }
+
+    SuburbNames = {};
+    for (let line of fs.readFileSync("suburbnames.txt").toString().replace(/\r/g, "").trim().split("\n")) {
+        let suburbTokens = line.split(",");
+        let suburbName = suburbTokens[0].trim().toLowerCase();
+        let suburbStateAndPostCode = suburbTokens[1].trim();
+        SuburbNames[suburbName] = suburbStateAndPostCode;
+    }
+}
+
+// Formats (and corrects) and address.
+
+function formatAddress(address: string) {
+    if (address.trim() === "")
+        return "";
+
+    let tokens = address.split(" ");
+
+    // It is common for an invalid postcode of "0" to appear on the end of an address.  Remove
+    // this if it is present.  For example, "Bremer Range RD CALLINGTON 0".
+   
+
+    let postCode = tokens[tokens.length - 1];
+    if (/^[0-9]{4}$/.test(postCode))
+        tokens.pop();
+    else if (postCode === "O" || postCode === "0") {
+        postCode = "";
+        tokens.pop();
+    } else
+        postCode = "";
+
+    // Pop tokens from the end of the array until a valid suburb name is encountered (allowing
+    // for a few spelling errors).
+
+    let suburbName = null;
+    for (let index = 1; index <= 4; index++) {
+        suburbName = didyoumean(tokens.slice(-index).join(" "), Object.keys(SuburbNames), { caseSensitive: false, returnType: "first-closest-match", thresholdType: "edit-distance", threshold: 2, trimSpace: true });
+        if (suburbName !== null) {
+            tokens.splice(-index, index);  // remove elements from the end of the array
+            break;
+        }
+    }
+
+    if (suburbName === null)  // suburb name not found (or not recognised)
+        return tokens.join(" ");
+
+    console.log(`Post Code: ${postCode}`);
+    console.log(`Suburb Name: ${suburbName}`);
+    console.log(`Remainder: ${tokens.join(" ")}`);
+}
+
 // Gets the text downwards in a rectangle, where the rectangle is delineated by the positions in
 // which the three specified strings of (case sensitive) text are found.
 
@@ -272,6 +343,8 @@ function parseApplicationElements(elements: Element[], startElement: Element, in
     console.log("----------Elements for one Application----------");
     for (let element of elements)
         console.log(`    [${element.text}] (${Math.round(element.x)},${Math.round(element.y)}) ${element.width}×${element.height} confidence=${Math.round((element as any).confidence)}%`);
+
+console.log("Refactor assessment number logic to a separate function.");
 
     // Find the "Assessment Number" text (allowing for spelling errors).
 
@@ -330,6 +403,8 @@ function parseApplicationElements(elements: Element[], startElement: Element, in
 
     console.log(`Application Number: ${applicationNumber}`);
 
+console.log("Refactor received date logic to a separate function.");
+
     // Search to the right of "Dev App No." for the lodged date (including up and down a few
     // "lines" from the "Dev App No." text because sometimes the lodged date is offset vertically
     // by a fair amount; in some cases offset up and in other cases offset down).
@@ -348,6 +423,8 @@ function parseApplicationElements(elements: Element[], startElement: Element, in
         receivedDate = moment(receivedDateElement.text.trim(), "D/MM/YYYY", true);
     
     console.log(`Received Date: ${receivedDate.isValid() ? receivedDate.format("YYYY-MM-DD") : ""}`)
+
+console.log("Refactor description logic to a separate function.");
 
     // Set the element which delineates the top of the description text.
 
@@ -375,6 +452,8 @@ function parseApplicationElements(elements: Element[], startElement: Element, in
 
     let description = descriptionElements.map(element => element.text).join(" ").trim().replace(/\s\s+/g, " ").replace(/ﬁ/g, "fi").replace(/ﬂ/g, "fl");
     console.log(`Description: ${description}`);
+
+console.log("Refactor address logic to a separate function.");
 
     // Find the elements above (at least a "line" above) the "Assessment Number" text and to the
     // left of the middleElement.  These elements correspond to the address (assumed to be on one
@@ -409,6 +488,7 @@ function parseApplicationElements(elements: Element[], startElement: Element, in
     // Construct the address from the discovered address elements.
 
     let address = addressElements.map(element => element.text).join(" ").trim().replace(/\s\s+/g, " ").replace(/ﬁ/g, "fi").replace(/ﬂ/g, "fl");
+    address = formatAddress(address);
     console.log(`Address: ${address}`);
 
     // for (let element of elements)
