@@ -233,7 +233,7 @@ function readAddressInformation() {
     StreetNames = {}
     for (let line of fs.readFileSync("streetnames.txt").toString().replace(/\r/g, "").trim().split("\n")) {
         let streetNameTokens = line.split(",");
-        let streetName = streetNameTokens[0].trim().toLowerCase();
+        let streetName = streetNameTokens[0].trim();
         let suburbName = streetNameTokens[1].trim();
         if (StreetNames[streetName] === undefined)
             StreetNames[streetName] = [];
@@ -255,7 +255,7 @@ function readAddressInformation() {
     }
 }
 
-// Formats (and corrects) and address.
+// Formats (and corrects) an address.
 
 function formatAddress(address: string) {
     if (address.trim() === "")
@@ -264,8 +264,7 @@ function formatAddress(address: string) {
     let tokens = address.split(" ");
 
     // It is common for an invalid postcode of "0" to appear on the end of an address.  Remove
-    // this if it is present.  For example, "Bremer Range RD CALLINGTON 0".
-   
+    // this if it is present.  For example, "Bremer Range RD CALLINGTON 0".   
 
     let postCode = tokens[tokens.length - 1];
     if (/^[0-9]{4}$/.test(postCode))
@@ -281,9 +280,10 @@ function formatAddress(address: string) {
 
     let suburbName = null;
     for (let index = 1; index <= 4; index++) {
-        suburbName = didyoumean(tokens.slice(-index).join(" "), Object.keys(SuburbNames), { caseSensitive: false, returnType: "first-closest-match", thresholdType: "edit-distance", threshold: 2, trimSpace: true });
-        if (suburbName !== null) {
-            tokens.splice(-index, index);  // remove elements from the end of the array
+        let suburbNameMatch = didyoumean(tokens.slice(-index).join(" "), Object.keys(SuburbNames), { caseSensitive: false, returnType: "first-closest-match", thresholdType: "edit-distance", threshold: 2, trimSpace: true });
+        if (suburbNameMatch !== null) {
+            suburbName = SuburbNames[suburbNameMatch];
+            tokens.splice(-index, index);  // remove elements from the end of the array           
             break;
         }
     }
@@ -291,9 +291,29 @@ function formatAddress(address: string) {
     if (suburbName === null)  // suburb name not found (or not recognised)
         return tokens.join(" ");
 
-    console.log(`Post Code: ${postCode}`);
-    console.log(`Suburb Name: ${suburbName}`);
-    console.log(`Remainder: ${tokens.join(" ")}`);
+    // Expand an abbreviated street suffix.  For example, expand "RD" to "Road".
+
+    let streetSuffixAbbreviation = tokens.pop() || "";
+    let streetSuffix = StreetSuffixes[streetSuffixAbbreviation.toLowerCase()] || streetSuffixAbbreviation;
+
+    // Allow minor spelling corrections in the remaining tokens to construct a street name.
+
+    let streetName = (tokens.join(" ") + " " + streetSuffix).trim();
+    let streetSuburbNames = undefined;
+    let streetNameMatch = didyoumean(streetName, Object.keys(StreetNames), { caseSensitive: false, returnType: "first-closest-match", thresholdType: "edit-distance", threshold: 2, trimSpace: true });
+    if (streetNameMatch !== null) {
+        streetName = streetNameMatch;
+        streetSuburbNames = StreetNames[streetNameMatch];
+    }
+
+    console.log(`Address: ${address}`);
+    console.log(`  Street Name: ${streetName}`)
+    console.log(`  Street Suffix: ${streetSuffix}`)
+    console.log(`  Suburb Name: ${suburbName}`);
+    console.log(`  Street Suburb Names: ${streetSuburbNames}`);
+    console.log(`  Post Code: ${postCode}`);
+
+    return (streetName + ((streetName === "") ? "" : ", ") + suburbName).trim();
 }
 
 // Gets the text downwards in a rectangle, where the rectangle is delineated by the positions in
@@ -340,9 +360,9 @@ function getDownText(elements: Element[], topText: string, rightText: string, bo
 // Parses the details from the elements associated with a single development application.
 
 function parseApplicationElements(elements: Element[], startElement: Element, informationUrl: string) {
-    console.log("----------Elements for one Application----------");
-    for (let element of elements)
-        console.log(`    [${element.text}] (${Math.round(element.x)},${Math.round(element.y)}) ${element.width}×${element.height} confidence=${Math.round((element as any).confidence)}%`);
+    // console.log("----------Elements for one Application----------");
+    // for (let element of elements)
+    //     console.log(`    [${element.text}] (${Math.round(element.x)},${Math.round(element.y)}) ${element.width}×${element.height} confidence=${Math.round((element as any).confidence)}%`);
 
 console.log("Refactor assessment number logic to a separate function.");
 
@@ -538,7 +558,7 @@ console.log("Refactor address logic to a separate function.");
     }
 }
 
-// Parses an image (from a PDF file).
+// Parses an image (from a PDF document).
 
 async function parseImage(image: any, bounds: Rectangle) {
     // Convert the image data into a format that can be used by jimp.
@@ -609,6 +629,8 @@ async function parseImage(image: any, bounds: Rectangle) {
 
     return elements;
 }
+
+// Parses a PDF document.
 
 async function parsePdf(url: string) {
     let developmentApplications = [];
@@ -760,11 +782,9 @@ async function main() {
 
     let database = await initializeDatabase();
     
-    // Read the files containing all possible suburb names.
+    // Read all street, street suffix, suburb, state and post code information.
 
-    SuburbNames = {};
-    for (let suburb of fs.readFileSync("suburbnames.txt").toString().replace(/\r/g, "").trim().split("\n"))
-        SuburbNames[suburb.split(",")[0]] = suburb.split(",")[1];
+    readAddressInformation();
 
     // Retrieve the page that contains the links to the PDFs.
 
