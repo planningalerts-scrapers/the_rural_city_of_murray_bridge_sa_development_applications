@@ -131,6 +131,12 @@ function constructUnion(rectangle1: Rectangle, rectangle2: Rectangle): Rectangle
     return { x: x1, y: y1, width: x2 - x1, height: y2 - y1 };
 }
 
+// Calculates the area of a rectangle.
+
+function getArea(rectangle: Rectangle) {
+    return rectangle.width * rectangle.height;
+}
+
 // Calculates the square of the Euclidean distance between two elements.
 
 function calculateDistance(element1: Element, element2: Element) {
@@ -362,7 +368,8 @@ function getDownText(elements: Element[], topText: string, rightText: string, bo
 function parseApplicationElements(elements: Element[], startElement: Element, informationUrl: string) {
     console.log("----------Elements for one Application----------");
     for (let element of elements)
-        console.log(`    [${element.text}] (${Math.round(element.x)},${Math.round(element.y)}) ${element.width}×${element.height} confidence=${Math.round((element as any).confidence)}%`);
+        console.log(`    [${element.text}] (${element.x},${element.y}) ${element.width}×${element.height} confidence=${Math.round((element as any).confidence)}%`);
+        // console.log(`    [${element.text}] (${Math.round(element.x)},${Math.round(element.y)}) ${element.width}×${element.height} confidence=${Math.round((element as any).confidence)}%`);
 
 console.log("Refactor assessment number logic to a separate function.");
 
@@ -485,7 +492,7 @@ console.log("Refactor address logic to a separate function.");
 
     let addressElements = elements.filter(element =>
         element.y < assessmentNumberElement.y - assessmentNumberElement.height &&
-        element.x < middleElement.x);
+        element.x < middleElement.x - 0.2 * middleElement.width);
 
     // Find the lowest address element (this is assumed to form part of the single line of the
     // address).
@@ -504,7 +511,7 @@ console.log(`middleElement is (x=${middleElement.x},y=${middleElement.y}) width=
 
     addressElements = elements.filter(element =>
         element.y < assessmentNumberElement.y - assessmentNumberElement.height &&
-        element.x < middleElement.x &&
+        element.x < middleElement.x - 0.2 * middleElement.width &&
         element.y >= addressBottomElement.y - Math.max(element.height, addressBottomElement.height));
 
     // Sort the address elements by Y co-ordinate and then by X co-ordinate (the Math.max
@@ -512,6 +519,26 @@ console.log(`middleElement is (x=${middleElement.x},y=${middleElement.y}) width=
 
     elementComparer = (a, b) => (a.y > b.y + Math.max(a.height, b.height)) ? 1 : ((a.y < b.y - Math.max(a.height, b.height)) ? -1 : ((a.x > b.x) ? 1 : ((a.x < b.x) ? -1 : 0)));
     addressElements.sort(elementComparer);
+
+    // Remove any smaller elements (say less than half the area) that are 90% or more encompassed
+    // by another element (this then avoids some artefacts of the text recognition, ie. elements
+    // such as "r~" and "-" that can otherwise overlap the main text).
+
+console.log("-----Address elements before:");
+for (let element of addressElements)
+    console.log(`    [${element.text}] (${element.x},${element.y}) ${element.width}×${element.height} confidence=${Math.round((element as any).confidence)}%`);
+
+    addressElements = addressElements.filter(element =>
+        !addressElements.some(otherElement =>
+            getArea(otherElement) > 2 * getArea(element) &&  // smaller element (ie. the other element is at least double the area)
+            getArea(element) > 0 &&
+            getArea(constructIntersection(element, otherElement)) / getArea(element) > 0.9
+        )
+    );
+
+console.log("-----Address elements after:");
+for (let element of addressElements)
+    console.log(`    [${element.text}] (${element.x},${element.y}) ${element.width}×${element.height} confidence=${Math.round((element as any).confidence)}%`);
 
     // Construct the address from the discovered address elements.
 
