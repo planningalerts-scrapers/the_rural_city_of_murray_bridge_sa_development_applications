@@ -360,9 +360,9 @@ function getDownText(elements: Element[], topText: string, rightText: string, bo
 // Parses the details from the elements associated with a single development application.
 
 function parseApplicationElements(elements: Element[], startElement: Element, informationUrl: string) {
-    // console.log("----------Elements for one Application----------");
-    // for (let element of elements)
-    //     console.log(`    [${element.text}] (${Math.round(element.x)},${Math.round(element.y)}) ${element.width}×${element.height} confidence=${Math.round((element as any).confidence)}%`);
+    console.log("----------Elements for one Application----------");
+    for (let element of elements)
+        console.log(`    [${element.text}] (${Math.round(element.x)},${Math.round(element.y)}) ${element.width}×${element.height} confidence=${Math.round((element as any).confidence)}%`);
 
 console.log("Refactor assessment number logic to a separate function.");
 
@@ -398,10 +398,14 @@ console.log("Refactor assessment number logic to a separate function.");
     // Find the "Applicant" text.
 
     let applicantElement = elements.find(element => element.y > startElement.y && element.text.trim().toLowerCase() === "applicant");
+if (applicantElement === undefined)
+    console.log("    Could not find applicantElement.");
 
     // Find the "Builder" text.
 
     let builderElement = elements.find(element => element.y > startElement.y && element.text.trim().toLowerCase() === "builder");
+if (builderElement === undefined)
+    console.log("    Could not find builderElement.");
 
     // One of either the applicant or builder elements is required in order to determine where
     // the description text starts on the X axis (and where the development application number
@@ -491,8 +495,12 @@ console.log("Refactor address logic to a separate function.");
         console.log(`Application number ${applicationNumber} will be ignored because an address was not found (searching upwards from the "Assessment Number" text).`);
         return undefined;
     }
+console.log(`addressBottomElement is (${addressBottomElement.x},${addressBottomElement.y}) width=${addressBottomElement.width} height=${addressBottomElement.height}`);
 
     // Obtain all elements on the same "line" as the lowest address element.
+
+console.log(`assessmentNumberElement is (${assessmentNumberElement.x},${assessmentNumberElement.y}) width=${assessmentNumberElement.width} height=${assessmentNumberElement.height}`);
+console.log(`middleElement is (x=${middleElement.x},y=${middleElement.y}) width=${middleElement.width} height=${middleElement.height}`);
 
     addressElements = elements.filter(element =>
         element.y < assessmentNumberElement.y - assessmentNumberElement.height &&
@@ -648,7 +656,8 @@ console.log("Only parsing the first few pages for testing purposes.");
 
 console.log("Get \"Records\" from first page and ensure that total is correct.");
 
-    for (let index = 0; index < pdf.numPages; index++) {
+    // for (let index = 0; index < pdf.numPages; index++) {
+    for (let index = 8; index < 9; index++) {
         console.log(`Page ${index + 1} of ${pdf.numPages}.`);
         let page = await pdf.getPage(index + 1);
         let viewportTest = await page.getViewport(1.0);
