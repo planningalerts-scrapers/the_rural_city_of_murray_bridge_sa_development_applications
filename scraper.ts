@@ -683,8 +683,8 @@ console.log("Only parsing the first few pages for testing purposes.");
 
 console.log("Get \"Records\" from first page and ensure that total is correct.");
 
-    // for (let index = 0; index < pdf.numPages; index++) {
-    for (let index = 8; index < 9; index++) {
+    for (let index = 0; index < pdf.numPages; index++) {
+    // for (let index = 8; index < 9; index++) {
         console.log(`Page ${index + 1} of ${pdf.numPages}.`);
         let page = await pdf.getPage(index + 1);
         let viewportTest = await page.getViewport(1.0);
