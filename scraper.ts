@@ -367,9 +367,9 @@ function getDownText(elements: Element[], topText: string, rightText: string, bo
 
 function parseApplicationElements(elements: Element[], startElement: Element, informationUrl: string) {
     console.log("----------Elements for one Application----------");
-    for (let element of elements)
-        console.log(`    [${element.text}] (${element.x},${element.y}) ${element.width}×${element.height} confidence=${Math.round((element as any).confidence)}%`);
-        // console.log(`    [${element.text}] (${Math.round(element.x)},${Math.round(element.y)}) ${element.width}×${element.height} confidence=${Math.round((element as any).confidence)}%`);
+    // for (let element of elements)
+    //     console.log(`    [${element.text}] (${element.x},${element.y}) ${element.width}×${element.height} confidence=${Math.round((element as any).confidence)}%`);
+    //     // console.log(`    [${element.text}] (${Math.round(element.x)},${Math.round(element.y)}) ${element.width}×${element.height} confidence=${Math.round((element as any).confidence)}%`);
 
 console.log("Refactor assessment number logic to a separate function.");
 
@@ -453,13 +453,14 @@ console.log("Refactor received date logic to a separate function.");
     if (receivedDateElement !== undefined)
         receivedDate = moment(receivedDateElement.text.trim(), "D/MM/YYYY", true);
     
-    console.log(`Received Date: ${receivedDate.isValid() ? receivedDate.format("YYYY-MM-DD") : ""}`)
+    if (receivedDate !== undefined)
+        console.log(`Received Date: ${receivedDate.isValid() ? receivedDate.format("YYYY-MM-DD") : ""}`)
 
 console.log("Refactor description logic to a separate function.");
 
     // Set the element which delineates the top of the description text.
 
-    let descriptionTopElement = (receivedDateElement === null) ? startElement : receivedDateElement;
+    let descriptionTopElement = (receivedDateElement === undefined) ? startElement : receivedDateElement;
 
     // Set the element which delineates the bottom left of the description text.
 
@@ -593,11 +594,151 @@ for (let element of addressElements)
     }
 }
 
-// Parses an image (from a PDF document).
+// Segments an image vertically and horizontally based on blocks of white (or almost white) pixels
+// in order to avoid using too much memory.  Very often a large image will be mostly white space.
+// A very simple horizontal and then vertical search is performed for consecutive lines of white
+// (or mostly white) pixels.
 
-async function parseImage(image: any, bounds: Rectangle) {
-    // Convert the image data into a format that can be used by jimp.
+let imageCount = 0;
+function segmentImage(jimpImage: any) {
+    let segments: { image: jimp, bounds: Rectangle }[] = [];
+    let bounds = { x: 0, y: 0, width: jimpImage.bitmap.width, height: jimpImage.bitmap.height };
 
+// imageCount++;
+// console.log(`Writing image ${imageCount}`);
+// jimpImage.write(`C:\\Temp\\Murray Bridge\\Reconstructed\\Reconstructed.Images.${imageCount}.png`);
+
+    // Only segment large images (do not waste time on small images which are already small enough
+    // that they will not cause too much memory to be used).
+
+    if (jimpImage.bitmap.width * jimpImage.bitmap.height > 500 * 500) {
+        let rectangles: Rectangle[] = [];
+        let verticalRectangles = segmentImageVertically(jimpImage, bounds);
+        for (let verticalRectangle of verticalRectangles)
+            rectangles = rectangles.concat(segmentImageHorizontally(jimpImage, verticalRectangle));
+    
+        for (let rectangle of rectangles) {
+            let croppedJimpImage: jimp = new (jimp as any)(rectangle.width, rectangle.height);
+            croppedJimpImage.blit(jimpImage, 0, 0, rectangle.x, rectangle.y, rectangle.width, rectangle.height);
+            segments.push({ image: croppedJimpImage, bounds: rectangle });
+        }
+    }
+    
+    if (segments.length === 0)
+        segments.push({ image: jimpImage, bounds: bounds});
+
+    return segments;
+}
+
+// Segments an image vertically (within the specified bounds) by searching for blocks of
+// consecutive, white (or close to white) horizontal lines.
+
+function segmentImageVertically(jimpImage: any, bounds: Rectangle) {
+    let whiteBlocks = [];
+
+    let isPreviousWhiteLine = false;
+    for (let y = bounds.y; y < bounds.y + bounds.height; y++) {
+        // Count the number of white pixels across the current horizontal line.
+
+        let whiteCount = 0;
+        for (let x = bounds.x; x < bounds.x + bounds.width; x++) {
+            let value = jimpImage.getPixelColor(x, y);
+            if (value === 0xffffffff)  // performance improvement (for the common case of a pure white pixel)
+                whiteCount++;
+            else {
+                let color = (jimp as any).intToRGBA(value);
+                if (color.r > 240 && color.g > 240 && color.b > 240)  // white or just off-white
+                    whiteCount++;
+            }
+        }
+
+        // If the line is mostly white pixels then it is considered a white line.
+
+        let isWhiteLine = (whiteCount >= bounds.width - 2);  // allow up to two non-white pixels
+
+        if (isWhiteLine) {
+            if (isPreviousWhiteLine)
+                whiteBlocks[whiteBlocks.length - 1].height++;  // increase the size of the current block
+            else
+                whiteBlocks.push({ y: y, height: 1 });  // start a new block
+        }
+
+        isPreviousWhiteLine = isWhiteLine;
+    }
+
+    // Only keep blocks of white that consist of 50 consecutive lines or more (an arbitrary value).
+
+    whiteBlocks = whiteBlocks.filter(whiteBlock => whiteBlock.height >= 50);
+
+    // Determine the bounds of the rectangles that remain when the blocks of white are removed.
+
+    let rectangles = [];
+    for (let index = 0; index <= whiteBlocks.length; index++) {
+        let y = (index === 0) ? 0 : (whiteBlocks[index - 1].y + whiteBlocks[index - 1].height);
+        let height = ((index === whiteBlocks.length) ? (bounds.y + bounds.height) : whiteBlocks[index].y) - y;
+        if (height > 0)
+            rectangles.push({ x: bounds.x, y: y, width: bounds.width, height: height });
+    }
+
+    return rectangles;
+}
+
+// Segments an image horizontally (within the specified bounds) by searching for blocks of
+// consecutive, white (or close to white) vertical lines.
+
+function segmentImageHorizontally(jimpImage: any, bounds: Rectangle) {
+    let whiteBlocks = [];
+
+    let isPreviousWhiteLine = false;
+    for (let x = bounds.x; x < bounds.x + bounds.width; x++) {
+        // Count the number of white pixels across the current vertical line.
+
+        let whiteCount = 0;
+        for (let y = bounds.y; y < bounds.y + bounds.height; y++) {
+            let value = jimpImage.getPixelColor(x, y);
+            if (value === 0xffffffff)  // performance improvement (for the common case of a pure white pixel)
+                whiteCount++;
+            else {
+                let color = (jimp as any).intToRGBA(value);
+                if (color.r > 240 && color.g > 240 && color.b > 240)  // white or just off-white
+                    whiteCount++;
+            }
+        }
+
+        // If the line is mostly white pixels then it is considered a white line.
+
+        let isWhiteLine = (whiteCount >= bounds.height - 2);  // allow up to two non-white pixels
+
+        if (isWhiteLine) {
+            if (isPreviousWhiteLine)
+                whiteBlocks[whiteBlocks.length - 1].width++;  // increase the size of the current block
+            else
+                whiteBlocks.push({ x: x, width: 1 });  // start a new block
+        }
+
+        isPreviousWhiteLine = isWhiteLine;
+    }
+
+    // Only keep blocks of white that consist of 50 consecutive lines or more (an arbitrary value).
+
+    whiteBlocks = whiteBlocks.filter(whiteBlock => whiteBlock.width >= 50);
+
+    // Determine the bounds of the rectangles that remain when the blocks of white are removed.
+
+    let rectangles = [];
+    for (let index = 0; index <= whiteBlocks.length; index++) {
+        let x = (index === 0) ? 0 : (whiteBlocks[index - 1].x + whiteBlocks[index - 1].width);
+        let width = ((index === whiteBlocks.length) ? (bounds.x + bounds.width) : whiteBlocks[index].x) - x;
+        if (width > 0)
+            rectangles.push({ x: x, y: bounds.y, width: width, height: bounds.height });
+    }
+
+    return rectangles;
+}
+
+// Converts image data from the PDF to a Jimp format image.
+
+function convertToJimpImage(image: any) {
     let pixelSize = (8 * image.data.length) / (image.width * image.height);
     let jimpImage = null;
 
@@ -631,36 +772,53 @@ async function parseImage(image: any, bounds: Rectangle) {
             }
         }
     }
-        
-    // Note that textord_old_baselines is set to 0 so that text that is offset by half the height
-    // of the the font is correctly recognised.
 
-    let imageBuffer = await new Promise((resolve, reject) => jimpImage.getBuffer(jimp.MIME_PNG, (error, buffer) => error ? reject(error) : resolve(buffer)));
-    let result: any = await new Promise((resolve, reject) => { tesseract.recognize(imageBuffer, { textord_old_baselines: "0" }).then(function(result) { resolve(result); }) });
+    return jimpImage;
+}
 
-    tesseract.terminate();
+// Parses an image (from a PDF document).
+
+async function parseImage(image: any, bounds: Rectangle) {
+    // Convert the image data into a format that can be used by jimp and then segment the image
+    // based on blocks of white.
+
+    let segments = segmentImage(convertToJimpImage(image));
     if (global.gc)
         global.gc();
 
-    // Simplify the lines (remove most of the information generated by tesseract.js).
+// console.log(`Writing image to file.`);
+// jimpImage.write(`C:\\Temp\\Murray Bridge\\Large Images\\Large Image.${image.width}×${image.height}.(${bounds.x},${bounds.y}).png`);
 
     let elements: Element[] = [];
+    for (let segment of segments) {
+        // Note that textord_old_baselines is set to 0 so that text that is offset by half the height
+        // of the the font is correctly recognised.
 
-    if (result.blocks && result.blocks.length)
-        for (let block of result.blocks)
-            for (let paragraph of block.paragraphs)
-                for (let line of paragraph.lines)
-                    elements = elements.concat(line.words.map(word => {
-                        return {
-                            text: word.text,
-                            confidence: word.confidence,
-                            choiceCount: word.choices.length,
-                            x: word.bbox.x0 + bounds.x,
-                            y: word.bbox.y0 + bounds.y,
-                            width: (word.bbox.x1 - word.bbox.x0),
-                            height: (word.bbox.y1 - word.bbox.y0)
-                        };
-                    }));
+        let imageBuffer = await new Promise((resolve, reject) => segment.image.getBuffer(jimp.MIME_PNG, (error, buffer) => error ? reject(error) : resolve(buffer)));
+        let result: any = await new Promise((resolve, reject) => { tesseract.recognize(imageBuffer, { textord_old_baselines: "0" }).then(function(result) { resolve(result); }) });
+
+        tesseract.terminate();
+        if (global.gc)
+            global.gc();
+
+        // Simplify the lines (remove most of the information generated by tesseract.js).
+
+        if (result.blocks && result.blocks.length)
+            for (let block of result.blocks)
+                for (let paragraph of block.paragraphs)
+                    for (let line of paragraph.lines)
+                        elements = elements.concat(line.words.map(word => {
+                            return {
+                                text: word.text,
+                                confidence: word.confidence,
+                                choiceCount: word.choices.length,
+                                x: word.bbox.x0 + bounds.x + segment.bounds.x,
+                                y: word.bbox.y0 + bounds.y + segment.bounds.y,
+                                width: (word.bbox.x1 - word.bbox.x0),
+                                height: (word.bbox.y1 - word.bbox.y0)
+                            };
+                        }));
+    }
 
     return elements;
 }
@@ -672,19 +830,21 @@ async function parsePdf(url: string) {
 
     // Read the PDF.
 
-    let buffer = await request({ url: url, encoding: null, proxy: process.env.MORPH_PROXY });
-    await sleep(2000 + getRandom(0, 5) * 1000);
+let hasAlreadyParsed = false;
+let fileName = decodeURI(new urlparser.URL(url).pathname.split("/").pop());
+console.log(`Reading "${fileName}" from local disk.`);
+let buffer = fs.readFileSync(`C:\\Temp\\Murray Bridge\\Test Set\\${fileName}`);
+
+    // let buffer = await request({ url: url, encoding: null, proxy: process.env.MORPH_PROXY });
+    // await sleep(2000 + getRandom(0, 5) * 1000);
 
     // Parse the PDF.  Each page has the details of multiple applications.
 
     let pdf = await pdfjs.getDocument({ data: buffer, disableFontFace: true, ignoreErrors: true });
 
-console.log("Only parsing the first few pages for testing purposes.");
-
 console.log("Get \"Records\" from first page and ensure that total is correct.");
 
     for (let index = 0; index < pdf.numPages; index++) {
-    // for (let index = 8; index < 9; index++) {
         console.log(`Page ${index + 1} of ${pdf.numPages}.`);
         let page = await pdf.getPage(index + 1);
         let viewportTest = await page.getViewport(1.0);
@@ -694,6 +854,12 @@ console.log("Get \"Records\" from first page and ensure that total is correct.")
 
         let elements: Element[] = [];
 
+if (hasAlreadyParsed) {
+    console.log("Reading pre-parsed elements.");
+    console.log(`Reading pre-parsed elements for page ${index + 1} of ${fileName}.`);
+    elements = JSON.parse(fs.readFileSync(`C:\\Temp\\Murray Bridge\\Test Set\\${fileName}.Page${index + 1}.txt`, "utf8"));
+} else {
+    console.log("Parsing using slow approach.");
         for (let index = 0; index < operators.fnArray.length; index++) {
             if (operators.fnArray[index] !== pdfjs.OPS.paintImageXObject && operators.fnArray[index] !== pdfjs.OPS.paintImageMaskXObject)
                 continue;
@@ -703,6 +869,8 @@ console.log("Get \"Records\" from first page and ensure that total is correct.")
             let image = operators.argsArray[index][0];
             if (typeof image === "string")
                 image = page.objs.get(image);  // get the actual image using its name
+            else
+                operators.argsArray[index][0] = undefined;  // attempt to release memory used by images
 
             // Obtain the transform that applies to the image.
 
@@ -719,9 +887,36 @@ console.log("Get \"Records\" from first page and ensure that total is correct.")
                 height: image.height
             };
 
+// console.log(`    Image: ${image.width}×${image.height}`);
+
             elements = elements.concat(await parseImage(image, bounds));
+            if (global.gc)
+                global.gc();
         }
-        
+
+// Reconstruct the image.
+//
+// let maximumWidth = Math.ceil(elements.reduce((maximum, element) => Math.max(maximum, element.x + element.width), 0));
+// let maximumHeight = Math.ceil(elements.reduce((maximum, element) => Math.max(maximum, element.y + element.height), 0));
+// console.log(`maximumWidth: ${maximumWidth}, maximumHeight: ${maximumHeight}, elements.length: ${elements.length}`);
+//
+// let reconstructedImage: any = await new Promise((resolve, reject) => new (jimp as any)(maximumWidth, maximumHeight, (error, image) => error ? reject(error) : resolve(image)));
+// let font = await (jimp as any).loadFont(jimp.FONT_SANS_16_BLACK);
+//
+// for (let element of elements) {
+//     let wordImage = new (jimp as any)(Math.round(element.width), Math.round(element.height), 0x776677ff);
+//     reconstructedImage.blit(wordImage, element.x, element.y, 0, 0, element.width, element.height);
+//     reconstructedImage.print(font, element.x, element.y, element.text);
+// }
+//
+// console.log(`Writing reconstructed image for page ${index + 1} of ${fileName}.`);
+// reconstructedImage.write(`C:\\Temp\\Murray Bridge\\Reconstructed\\Reconstructed.${fileName}.Page${index + 1}.png`);
+
+    console.log(`Saving the elements for page ${index + 1} of ${fileName}.`);
+    fs.writeFileSync(`C:\\Temp\\Murray Bridge\\Test Set\\${fileName}.Page${index + 1}.txt`, JSON.stringify(elements));
+    continue;
+}
+
         // Sort the elements by Y co-ordinate and then by X co-ordinate.
 
         let elementComparer = (a, b) => (a.y > b.y) ? 1 : ((a.y < b.y) ? -1 : ((a.x > b.x) ? 1 : ((a.x < b.x) ? -1 : 0)));
@@ -822,6 +1017,9 @@ async function main() {
 
     readAddressInformation();
 
+console.log("Temporarily skipping read of page (for test set purposes).");
+if (false) {
+
     // Retrieve the page that contains the links to the PDFs.
 
     console.log(`Retrieving page: ${DevelopmentApplicationsUrl}`);
@@ -847,16 +1045,74 @@ async function main() {
     // at once because this may use too much memory, resulting in morph.io terminating the current
     // process).
 
-    let selectedPdfUrls: string[] = [];
-    selectedPdfUrls.push(pdfUrls.shift());
-    if (pdfUrls.length > 0)
-        selectedPdfUrls.push(pdfUrls[getRandom(1, pdfUrls.length)]);
-    if (getRandom(0, 2) === 0)
-        selectedPdfUrls.reverse();
+    // let selectedPdfUrls: string[] = [];
+    // selectedPdfUrls.push(pdfUrls.shift());
+    // if (pdfUrls.length > 0)
+    //     selectedPdfUrls.push(pdfUrls[getRandom(1, pdfUrls.length)]);
+    // if (getRandom(0, 2) === 0)
+    //     selectedPdfUrls.reverse();
 
 // selectedPdfUrls = [ "http://www.murraybridge.sa.gov.au/webdata/resources/files/Crystal%20Report%20-%20DevApp%20July%202018.pdf", "http://www.murraybridge.sa.gov.au/webdata/resources/files/Crystal%20Report%20-%20DevApp%20February%202017.pdf" ];
 // selectedPdfUrls = [ "http://www.murraybridge.sa.gov.au/webdata/resources/files/Crystal%20Report%20-%20DevApp%20July%202018.pdf" ];
-selectedPdfUrls = [ "http://www.murraybridge.sa.gov.au/webdata/resources/files/Crystal%20Report%20-%20DevApp%20February%202017.pdf" ];
+// selectedPdfUrls = [ "http://www.murraybridge.sa.gov.au/webdata/resources/files/Crystal%20Report%20-%20DevApp%20February%202017.pdf" ];
+}
+
+let selectedPdfUrls = [
+    "http://www.murraybridge.sa.gov.au/webdata/resources/files/Crystal%20Report%20-%20DevApp%20July%202018.pdf",
+    "http://www.murraybridge.sa.gov.au/webdata/resources/files/Crystal%20Report%20-%20DevApp%20June%202018.pdf",
+    "http://www.murraybridge.sa.gov.au/webdata/resources/files/Crystal%20Report%20-%20DevApp%20May%202018.pdf",
+    "http://www.murraybridge.sa.gov.au/webdata/resources/files/Development%20Decisions%20April%202018-1.pdf",
+    "http://www.murraybridge.sa.gov.au/webdata/resources/files/Crystal%20Report%20-%20DevApp%20February%202018.pdf",
+    "http://www.murraybridge.sa.gov.au/webdata/resources/files/Crystal%20Report%20-%20DevApp%20January%202018.pdf",
+    "http://www.murraybridge.sa.gov.au/webdata/resources/files/December%202017.pdf", 
+    "http://www.murraybridge.sa.gov.au/webdata/resources/files/Crystal%20Report%20-%20DevApp%20November%202017.pdf",
+    "http://www.murraybridge.sa.gov.au/webdata/resources/files/Crystal%20Report%20-%20DevApp%20October%202017.pdf", 
+    "http://www.murraybridge.sa.gov.au/webdata/resources/files/Crystal%20Report%20-%20DevApp%20September%202017.pdf", 
+    "http://www.murraybridge.sa.gov.au/webdata/resources/files/Crystal%20Report%20-%20DevApp%20August%202017.pdf",
+    "http://www.murraybridge.sa.gov.au/webdata/resources/files/Crystal%20Report%20-%20DevApp%20July%202017.pdf", 
+    "http://www.murraybridge.sa.gov.au/webdata/resources/files/Crystal%20Report%20-%20DevApp%20June%202017.pdf",
+    "http://www.murraybridge.sa.gov.au/webdata/resources/files/Crystal%20Report%20-%20DevApp%20May%202017.pdf",
+    "http://www.murraybridge.sa.gov.au/webdata/resources/files/Crystal%20Report%20-%20DevApp%20April%202017-1.pdf",
+    "http://www.murraybridge.sa.gov.au/webdata/resources/files/Crystal%20Report%20-%20DevApp%20April%202017.pdf", 
+    "http://www.murraybridge.sa.gov.au/webdata/resources/files/Crystal%20Report%20-%20DevApp%20February%202017.pdf", 
+    "http://www.murraybridge.sa.gov.au/webdata/resources/files/Crystal%20Report%20-%20DevApp%20January%202017.pdf",
+    "http://www.murraybridge.sa.gov.au/webdata/resources/files/Crystal%20Report%20-%20DevApp%20December%202016.pdf",
+    "http://www.murraybridge.sa.gov.au/webdata/resources/files/Crystal%20Report%20-%20DevApp%20November%202016.pdf",  // crashed on this PDF 01-Sep-2018
+    "http://www.murraybridge.sa.gov.au/webdata/resources/files/Crystal%20Report%20-%20DevApp%20October%202016.pdf",  // crashed on this PDF 10-Sep-2018
+    "http://www.murraybridge.sa.gov.au/webdata/resources/files/Crystal%20Report%20-%20DevApp%20September%202016.pdf", 
+    "http://www.murraybridge.sa.gov.au/webdata/resources/files/Crystal%20Report%20-%20DevApp%20August%202016.pdf",  // crashed on this PDF 11-Sep-2018
+    "http://www.murraybridge.sa.gov.au/webdata/resources/files/Crystal%20Report%20-%20DevApp%20July%202016.pdf", 
+    "http://www.murraybridge.sa.gov.au/webdata/resources/files/Crystal%20Report%20-%20DevApp%20June%202016.pdf", 
+    "http://www.murraybridge.sa.gov.au/webdata/resources/files/Crystal%20Report%20-%20DevApp%20May%202016.pdf", 
+    "http://www.murraybridge.sa.gov.au/webdata/resources/files/Crystal%20Report%20-%20DevApp%20April%202016.pdf",
+    "http://www.murraybridge.sa.gov.au/webdata/resources/files/Crystal%20Report%20-%20DevApp%20March%202016.pdf", 
+    "http://www.murraybridge.sa.gov.au/webdata/resources/files/Crystal%20Report%20-%20DevApp%20February%202016.pdf",
+    "http://www.murraybridge.sa.gov.au/webdata/resources/files/Crystal%20Report%20-%20DevApp%20January%202016.pdf",
+    "http://www.murraybridge.sa.gov.au/webdata/resources/files/Crystal%20Report%20-%20DevApp%20November%202015.pdf",
+    "http://www.murraybridge.sa.gov.au/webdata/resources/files/Crystal%20Report%20-%20DevApp%20October%202015.pdf",
+    "http://www.murraybridge.sa.gov.au/webdata/resources/files/Crystal%20Report%20-%20DevAppSeptember%202015.pdf",
+    "http://www.murraybridge.sa.gov.au/webdata/resources/files/Crystal%20Report%20-%20DevApp%20August%202015.pdf",
+    "http://www.murraybridge.sa.gov.au/webdata/resources/files/Crystal%20Report%20-%20DevApp%20July%202015.pdf", 
+    "http://www.murraybridge.sa.gov.au/webdata/resources/files/Crystam%20Report%20-%20DevApproval%20June%202015.pdf",
+    "http://www.murraybridge.sa.gov.au/webdata/resources/files/Crystal%20Report%20-%20DevApp%20May%202015.pdf",
+    "http://www.murraybridge.sa.gov.au/webdata/resources/files/Crystal%20Report%20-%20DevApp%20April%202015.pdf",
+    "http://www.murraybridge.sa.gov.au/webdata/resources/files/Crystal%20Report%20-%20DevApp%20March%202015.pdf",
+    "http://www.murraybridge.sa.gov.au/webdata/resources/files/Crystal%20Report%20-%20DevApp%20February%202015.pdf", 
+    "http://www.murraybridge.sa.gov.au/webdata/resources/files/Crystal%20Report%20-%20DevApp%20January%202015.pdf", 
+    "http://www.murraybridge.sa.gov.au/webdata/resources/files/Crystal%20Report%20-%20DevApp%20November%202014.pdf", 
+    "http://www.murraybridge.sa.gov.au/webdata/resources/files/Crystal%20Report%20-%20DevApp%20October%202014.pdf", 
+    "http://www.murraybridge.sa.gov.au/webdata/resources/files/Crystal%20Report%20-%20DevApp%20September%202014.pdf", 
+    "http://www.murraybridge.sa.gov.au/webdata/resources/files/Crystal%20Report%20-%20DevApp%20August%202014.pdf", 
+    "http://www.murraybridge.sa.gov.au/webdata/resources/files/Crystal%20Report%20-%20DevApp%20July%202014.pdf", 
+    "http://www.murraybridge.sa.gov.au/webdata/resources/files/Crystal%20Report%20-%20DevApp%20June%202014.pdf", 
+    "http://www.murraybridge.sa.gov.au/webdata/resources/files/Crystal%20Report%20-%20DevApp%20May%202014.pdf", 
+    "http://www.murraybridge.sa.gov.au/webdata/resources/files/Crystal%20Report%20-%20DevApp%20April%202014.pdf", 
+    "http://www.murraybridge.sa.gov.au/webdata/resources/files/Crystal%20Report%20-%20DevApp%20March%202014.pdf", 
+    "http://www.murraybridge.sa.gov.au/webdata/resources/files/Crystal%20Report%20-%20DevApp%20February%202014.pdf",
+    "http://www.murraybridge.sa.gov.au/webdata/resources/files/Crystal%20Report%20-%20DevApp%20January%202014.pdf",
+    "http://www.murraybridge.sa.gov.au/webdata/resources/files/Crystal%20Report%20-%20DevApproval%20November%202013.pdf",
+    "http://www.murraybridge.sa.gov.au/webdata/resources/files/Crystal%20Reports%20-%20DevApproval%20October%202013.pdf"
+];
 
     for (let pdfUrl of selectedPdfUrls) {
         console.log(`Parsing document: ${pdfUrl}`);
