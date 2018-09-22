@@ -84,7 +84,8 @@ interface Rectangle {
 // An element (consisting of text and a bounding rectangle) in a PDF document.
 
 interface Element extends Rectangle {
-    text: string
+    text: string,
+    confidence: number
 }
 
 // Returns the text of the element with all whitespace removed, changed to lowercase and some
@@ -166,7 +167,7 @@ function getVerticalOverlapPercentage(element1: Element, element2: Element) {
 // Gets the element immediately to the right of the specified element.
 
 function getRightElement(elements: Element[], element: Element) {
-    let closestElement: Element = { text: undefined, x: Number.MAX_VALUE, y: Number.MAX_VALUE, width: 0, height: 0 };
+    let closestElement: Element = { text: undefined, confidence: 0, x: Number.MAX_VALUE, y: Number.MAX_VALUE, width: 0, height: 0 };
     for (let rightElement of elements)
         if (isVerticalOverlap(element, rightElement) && calculateDistance(element, rightElement) < calculateDistance(element, closestElement))
             closestElement = rightElement;
@@ -543,8 +544,10 @@ for (let element of addressElements)
 
     for (let index = 1; index < addressElements.length; index++) {
         if (addressElements[index].x - (addressElements[index - 1].x + addressElements[index - 1].width) > 50) {  // gap greater than 50 pixels
-            addressElements.length = index;  // remove the element and all following elements that appear after a large gap
-            break;
+            if (addressElements[index - 1].confidence >= 60 && addressElements[index].confidence >= 60) {  // avoid random marks and the edge of the paper being recognised as text
+                addressElements.length = index;  // remove the element and all following elements that appear after a large gap
+                break;
+            }
         }
     }
 
@@ -556,6 +559,8 @@ for (let element of addressElements)
     // spelling errors).
 
     let address = addressElements.map(element => element.text).join(" ").trim().replace(/\s\s+/g, " ").replace(/ﬁ/g, "fi").replace(/ﬂ/g, "fl").replace(/\\\//g, "V");
+    if (address.startsWith("Dev Cost"))  // finding this text instead of an address indicates that there is not address present
+        return undefined;
     address = formatAddress(address);
     console.log(`Address: ${address}`);
 
@@ -975,6 +980,7 @@ if (hasAlreadyParsed) {
             let startElement = startElements[index];
             let raisedStartElement: Element = {
                 text: startElement.text,
+                confidence: startElement.confidence,
                 x: startElement.x,
                 y: startElement.y - 2 * startElement.height,  // leeway
                 width: startElement.width,

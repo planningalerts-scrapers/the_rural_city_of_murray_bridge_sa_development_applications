@@ -3,6 +3,7 @@ Bvd,Boulevard
 Cir,Circuit
 Cl,Close
 Cr,Crescent
+Cres,Crescent
 Ct,Court
 Dr,Drive
 Fwy,Freeway
