@@ -555,7 +555,7 @@ for (let element of addressElements)
     // Construct the address from the discovered address elements (and attempt to correct some
     // spelling errors).
 
-    let address = addressElements.map(element => element.text).join(" ").trim().replace(/\s\s+/g, " ").replace(/ﬁ/g, "fi").replace(/ﬂ/g, "fl");
+    let address = addressElements.map(element => element.text).join(" ").trim().replace(/\s\s+/g, " ").replace(/ﬁ/g, "fi").replace(/ﬂ/g, "fl").replace(/\\\//g, "V");
     address = formatAddress(address);
     console.log(`Address: ${address}`);
 
