@@ -374,24 +374,24 @@ function parseApplicationElements(elements: Element[], startElement: Element, in
 
 console.log("Refactor assessment number logic to a separate function.");
 
-    // Find the "Assessment Number" text (allowing for spelling errors).
+    // Find the "Assessment Number" or "Asses Num" text (allowing for spelling errors).
 
     let assessmentNumberElement = elements.find(element =>
         element.y > startElement.y &&
-        didyoumean(element.text, [ "Assessment Number" ], { caseSensitive: false, returnType: "first-closest-match", thresholdType: "edit-distance", threshold: 2, trimSpace: true }) !== null);
-    
+        didyoumean(element.text, [ "Assessment Number", "Asses Num" ], { caseSensitive: false, returnType: "first-closest-match", thresholdType: "edit-distance", threshold: 2, trimSpace: true }) !== null);
+
     if (assessmentNumberElement === undefined) {
         // Find any occurrences of the text "Assessment".
 
         let assessmentElements = elements.filter(
             element => element.y > startElement.y &&
-            didyoumean(element.text, [ "Assessment" ], { caseSensitive: false, returnType: "first-closest-match", thresholdType: "edit-distance", threshold: 2, trimSpace: true }) !== null);
+            didyoumean(element.text, [ "Assessment", "Asses" ], { caseSensitive: false, returnType: "first-closest-match", thresholdType: "edit-distance", threshold: 2, trimSpace: true }) !== null);
 
         // Check if any of those occurrences of "Assessment" are followed by "Number".
 
         for (let assessmentElement of assessmentElements) {
             let assessmentRightElement = getRightElement(elements, assessmentElement);
-            if (assessmentRightElement !== null && didyoumean(assessmentRightElement.text, [ "Number" ], { caseSensitive: false, returnType: "first-closest-match", thresholdType: "edit-distance", threshold: 2, trimSpace: true }) !== null) {
+            if (assessmentRightElement !== null && didyoumean(assessmentRightElement.text, [ "Number", "Num" ], { caseSensitive: false, returnType: "first-closest-match", thresholdType: "edit-distance", threshold: 2, trimSpace: true }) !== null) {
                 assessmentNumberElement = assessmentElement;
                 break;
             }
@@ -610,7 +610,7 @@ function segmentImage(jimpImage: any) {
 
 // imageSegmentedCount++;
 // console.log(`    Writing segmented image ${imageSegmentedCount} to file.`);
-// croppedJimpImage.write(`C:\\Temp\\Murray Bridge\\Problem\\Large Image.${imageConvertCount}.Segment${imageSegmentedCount}.${rectangle.width}×${rectangle.height}.png`);
+// croppedJimpImage.write(`C:\\Temp\\Murray Bridge\\Test Set\\Large Image.${imageConvertCount}.Segment${imageSegmentedCount}.${rectangle.width}×${rectangle.height}.png`);
             
             segments.push({ image: croppedJimpImage, bounds: rectangle });
         }
@@ -769,7 +769,7 @@ function convertToJimpImage(image: any) {
 
 // imageConvertCount++;
 // console.log(`Writing image ${imageConvertCount} to file.`);
-// jimpImage.write(`C:\\Temp\\Murray Bridge\\Problem\\Large Image.${imageConvertCount}.${image.width}×${image.height}.png`);
+// jimpImage.write(`C:\\Temp\\Murray Bridge\\Test Set\\Large Image.${imageConvertCount}.${image.width}×${image.height}.png`);
 
     return jimpImage;
 }
@@ -828,7 +828,7 @@ async function parsePdf(url: string) {
 let hasAlreadyParsed = true;
 let fileName = decodeURI(new urlparser.URL(url).pathname.split("/").pop());
 console.log(`Reading "${fileName}" from local disk.`);
-let buffer = fs.readFileSync(`C:\\Temp\\Murray Bridge\\Problem\\${fileName}`);
+let buffer = fs.readFileSync(`C:\\Temp\\Murray Bridge\\Test Set\\${fileName}`);
 
     // let buffer = await request({ url: url, encoding: null, proxy: process.env.MORPH_PROXY });
     // await sleep(2000 + getRandom(0, 5) * 1000);
@@ -914,7 +914,7 @@ if (hasAlreadyParsed) {
 // reconstructedImage.write(`C:\\Temp\\Murray Bridge\\Reconstructed\\Reconstructed.${fileName}.Page${index + 1}.png`);
 
     console.log(`Saving the elements for page ${index + 1} of ${fileName}.`);
-    fs.writeFileSync(`C:\\Temp\\Murray Bridge\\Problem\\${fileName}.Page${index + 1}.txt`, JSON.stringify(elements));
+    fs.writeFileSync(`C:\\Temp\\Murray Bridge\\Test Set\\${fileName}.Page${index + 1}.txt`, JSON.stringify(elements));
     continue;
 }
 
@@ -1099,10 +1099,10 @@ let selectedPdfUrls = [
     // "http://www.murraybridge.sa.gov.au/webdata/resources/files/Crystal%20Report%20-%20DevApp%20April%202016.pdf",  // try this one
     // "http://www.murraybridge.sa.gov.au/webdata/resources/files/Crystal%20Report%20-%20DevApp%20March%202016.pdf", 
     // "http://www.murraybridge.sa.gov.au/webdata/resources/files/Crystal%20Report%20-%20DevApp%20February%202016.pdf",
-    // "http://www.murraybridge.sa.gov.au/webdata/resources/files/Crystal%20Report%20-%20DevApp%20January%202016.pdf",
+    "http://www.murraybridge.sa.gov.au/webdata/resources/files/Crystal%20Report%20-%20DevApp%20January%202016.pdf",
     // "http://www.murraybridge.sa.gov.au/webdata/resources/files/Crystal%20Report%20-%20DevApp%20November%202015.pdf",  // images not parsed 20-Sep-2018
     // "http://www.murraybridge.sa.gov.au/webdata/resources/files/Crystal%20Report%20-%20DevApp%20October%202015.pdf",
-    "http://www.murraybridge.sa.gov.au/webdata/resources/files/Crystal%20Report%20-%20DevAppSeptember%202015.pdf",  // images not parsed 20-Sep-2018
+    // "http://www.murraybridge.sa.gov.au/webdata/resources/files/Crystal%20Report%20-%20DevAppSeptember%202015.pdf",  // images not parsed 20-Sep-2018
     // "http://www.murraybridge.sa.gov.au/webdata/resources/files/Crystal%20Report%20-%20DevApp%20August%202015.pdf",  // images not parsed 20-Sep-2018
     // "http://www.murraybridge.sa.gov.au/webdata/resources/files/Crystal%20Report%20-%20DevApp%20July%202015.pdf",  // images not parsed 20-Sep-2018
     // "http://www.murraybridge.sa.gov.au/webdata/resources/files/Crystam%20Report%20-%20DevApproval%20June%202015.pdf",
