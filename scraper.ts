@@ -93,14 +93,14 @@ interface Element extends Rectangle {
 function condenseText(element: Element) {
     if (element === undefined || element.text === undefined)
         return undefined;
-    return element.text.trim().replace(/[\s.,]/g, "").toLowerCase();
+    return element.text.trim().replace(/[\s.,\-_]/g, "").toLowerCase();
 }
 
 // Gets the highest Y co-ordinate of all elements that are considered to be in the same row as
 // the specified element.
 
 function getRowTop(elements: Element[], startElement: Element) {
-    let top = Number.MAX_VALUE;
+    let top = startElement.y;
     for (let element of elements)
         if (element.y < startElement.y + startElement.height && element.y + element.height > startElement.y)
             if (element.y < top)
@@ -275,7 +275,7 @@ function formatAddress(address: string) {
     let postCode = tokens[tokens.length - 1];
     if (/^[0-9]{4}$/.test(postCode))
         tokens.pop();
-    else if (postCode === "O" || postCode === "0") {
+    else if (postCode === "O" || postCode === "0" || postCode === "D") {
         postCode = "";
         tokens.pop();
     } else
@@ -425,7 +425,7 @@ if (builderElement === undefined)
     }
 
     let applicationNumber = getRightRowText(elements, startElement, middleElement).trim().replace(/\s/g, "");
-    applicationNumber = applicationNumber.replace(/[IlL\[\]\|]/g, "/");  // for example, converts "17I2017" to "17/2017"
+    applicationNumber = applicationNumber.replace(/[IlL\[\]\|’,]/g, "/");  // for example, converts "17I2017" to "17/2017"
 
     if (applicationNumber === "") {
         console.log("Could not find the application number on the PDF page for the current development application.  The development application will be ignored.");
@@ -537,11 +537,23 @@ for (let element of addressElements)
         )
     );
 
+    // Remove any address elements that occur after a sizeable gap.  Any such elements are very
+    // likely part of the description (not the address) because sometimes the description is
+    // moved to the left, closer to the address (see "Crystal Report - DevAppSeptember 2015.pdf").
+
+    for (let index = 1; index < addressElements.length; index++) {
+        if (addressElements[index].x - (addressElements[index - 1].x + addressElements[index - 1].width) > 50) {  // gap greater than 50 pixels
+            addressElements.length = index;  // remove the element and all following elements that appear after a large gap
+            break;
+        }
+    }
+
 console.log("-----Address elements after:");
 for (let element of addressElements)
     console.log(`    [${element.text}] (${element.x},${element.y}) ${element.width}×${element.height} confidence=${Math.round((element as any).confidence)}%`);
 
-    // Construct the address from the discovered address elements.
+    // Construct the address from the discovered address elements (and attempt to correct some
+    // spelling errors).
 
     let address = addressElements.map(element => element.text).join(" ").trim().replace(/\s\s+/g, " ").replace(/ﬁ/g, "fi").replace(/ﬂ/g, "fl");
     address = formatAddress(address);
@@ -550,39 +562,7 @@ for (let element of addressElements)
     // for (let element of elements)
     //     console.log(`[${Math.round(element.x)},${Math.round(element.y)}] ${element.text}`);
     console.log("----------");
-    return [];
 
-    // let applicationNumber = getRightText(elements, "Application No", "Application Date", "Applicants Name");
-    // let receivedDate = getRightText(elements, "Application Date", "Planning Approval", "Application received");
-    let houseNumber = getRightText(elements, "Property House No", "Planning Conditions", "Lot");
-    let streetName = getRightText(elements, "Property street", "Planning Conditions", "Property suburb");
-    let suburbName = getRightText(elements, "Property suburb", "Planning Conditions", "Title");
-    // let description = getDownText(elements, "Development Description", "Relevant Authority", undefined);
-
-    // let address = "";
-
-    if (houseNumber !== undefined)
-        address += houseNumber.trim();
-    if (streetName !== undefined)
-        address += ((address === "") ? "" : " ") + streetName.trim();
-    if (suburbName === undefined || suburbName.trim() === "")
-        address = "";  // ignore the application because there is no suburb
-    
-    // Attempt to add the state and post code to the suburb.
-
-    let suburbNameAndPostCode = SuburbNames[suburbName.trim()];
-    if (suburbNameAndPostCode === undefined)
-        suburbNameAndPostCode = suburbName.trim();
-
-    address += ((address === "") ? "" : ", ") + suburbNameAndPostCode;
-    address = address.trim();
-
-    // A valid application must at least have an application number and an address.
-
-    if (applicationNumber === "" || address === "")
-        return undefined;
-
-    let parsedReceivedDate = moment(receivedDate, "D/MM/YYYY", true);  // allows the leading zero of the day to be omitted
     return {
         applicationNumber: applicationNumber,
         address: address,
@@ -590,7 +570,7 @@ for (let element of addressElements)
         informationUrl: informationUrl,
         commentUrl: CommentUrl,
         scrapeDate: moment().format("YYYY-MM-DD"),
-        receivedDate: parsedReceivedDate.isValid() ? parsedReceivedDate.format("YYYY-MM-DD") : ""
+        receivedDate: (receivedDate !== undefined && receivedDate.isValid()) ? receivedDate.format("YYYY-MM-DD") : ""
     }
 }
 
@@ -600,6 +580,8 @@ for (let element of addressElements)
 // (or mostly white) pixels.
 
 let imageCount = 0;
+let imageSegmentedCount = 0;
+
 function segmentImage(jimpImage: any) {
     let segments: { image: jimp, bounds: Rectangle }[] = [];
     let bounds = { x: 0, y: 0, width: jimpImage.bitmap.width, height: jimpImage.bitmap.height };
@@ -620,6 +602,11 @@ function segmentImage(jimpImage: any) {
         for (let rectangle of rectangles) {
             let croppedJimpImage: jimp = new (jimp as any)(rectangle.width, rectangle.height);
             croppedJimpImage.blit(jimpImage, 0, 0, rectangle.x, rectangle.y, rectangle.width, rectangle.height);
+
+// imageSegmentedCount++;
+// console.log(`    Writing segmented image ${imageSegmentedCount} to file.`);
+// croppedJimpImage.write(`C:\\Temp\\Murray Bridge\\Problem\\Large Image.${imageConvertCount}.Segment${imageSegmentedCount}.${rectangle.width}×${rectangle.height}.png`);
+            
             segments.push({ image: croppedJimpImage, bounds: rectangle });
         }
     }
@@ -666,9 +653,9 @@ function segmentImageVertically(jimpImage: any, bounds: Rectangle) {
         isPreviousWhiteLine = isWhiteLine;
     }
 
-    // Only keep blocks of white that consist of 50 consecutive lines or more (an arbitrary value).
+    // Only keep blocks of white that consist of 25 consecutive lines or more (an arbitrary value).
 
-    whiteBlocks = whiteBlocks.filter(whiteBlock => whiteBlock.height >= 50);
+    whiteBlocks = whiteBlocks.filter(whiteBlock => whiteBlock.height >= 25);
 
     // Determine the bounds of the rectangles that remain when the blocks of white are removed.
 
@@ -719,9 +706,9 @@ function segmentImageHorizontally(jimpImage: any, bounds: Rectangle) {
         isPreviousWhiteLine = isWhiteLine;
     }
 
-    // Only keep blocks of white that consist of 50 consecutive lines or more (an arbitrary value).
+    // Only keep blocks of white that consist of 25 consecutive lines or more (an arbitrary value).
 
-    whiteBlocks = whiteBlocks.filter(whiteBlock => whiteBlock.width >= 50);
+    whiteBlocks = whiteBlocks.filter(whiteBlock => whiteBlock.width >= 25);
 
     // Determine the bounds of the rectangles that remain when the blocks of white are removed.
 
@@ -737,6 +724,8 @@ function segmentImageHorizontally(jimpImage: any, bounds: Rectangle) {
 }
 
 // Converts image data from the PDF to a Jimp format image.
+
+let imageConvertCount = 0;
 
 function convertToJimpImage(image: any) {
     let pixelSize = (8 * image.data.length) / (image.width * image.height);
@@ -773,6 +762,10 @@ function convertToJimpImage(image: any) {
         }
     }
 
+// imageConvertCount++;
+// console.log(`Writing image ${imageConvertCount} to file.`);
+// jimpImage.write(`C:\\Temp\\Murray Bridge\\Problem\\Large Image.${imageConvertCount}.${image.width}×${image.height}.png`);
+
     return jimpImage;
 }
 
@@ -785,9 +778,6 @@ async function parseImage(image: any, bounds: Rectangle) {
     let segments = segmentImage(convertToJimpImage(image));
     if (global.gc)
         global.gc();
-
-// console.log(`Writing image to file.`);
-// jimpImage.write(`C:\\Temp\\Murray Bridge\\Large Images\\Large Image.${image.width}×${image.height}.(${bounds.x},${bounds.y}).png`);
 
     let elements: Element[] = [];
     for (let segment of segments) {
@@ -830,10 +820,10 @@ async function parsePdf(url: string) {
 
     // Read the PDF.
 
-let hasAlreadyParsed = false;
+let hasAlreadyParsed = true;
 let fileName = decodeURI(new urlparser.URL(url).pathname.split("/").pop());
 console.log(`Reading "${fileName}" from local disk.`);
-let buffer = fs.readFileSync(`C:\\Temp\\Murray Bridge\\Test Set\\${fileName}`);
+let buffer = fs.readFileSync(`C:\\Temp\\Murray Bridge\\Problem\\${fileName}`);
 
     // let buffer = await request({ url: url, encoding: null, proxy: process.env.MORPH_PROXY });
     // await sleep(2000 + getRandom(0, 5) * 1000);
@@ -872,15 +862,19 @@ if (hasAlreadyParsed) {
             else
                 operators.argsArray[index][0] = undefined;  // attempt to release memory used by images
 
-            // Obtain the transform that applies to the image.
+            // Obtain the transform that applies to the image.  Note that the first image in the
+            // PDF typically has a pdfjs.OPS.dependency element in the fnArray between it and its
+            // transform (pdfjs.OPS.transform).
 
-            let transform = (index - 1 >= 0 && operators.fnArray[index - 1] === pdfjs.OPS.transform) ? operators.argsArray[index - 1] : undefined;
-            if (transform === undefined)  // a transform is needed
+            let transform = undefined;
+            if (index - 1 >= 0 && operators.fnArray[index - 1] === pdfjs.OPS.transform)
+                transform = operators.argsArray[index - 1];
+            else if (index - 2 >= 0 && operators.fnArray[index - 1] === pdfjs.OPS.dependency && operators.fnArray[index - 2] === pdfjs.OPS.transform)
+                transform = operators.argsArray[index - 2];
+            else
                 continue;
 
-            // Parse the text from the image.
-
-            let bounds = {
+            let bounds: Rectangle = {
                 x: (transform[4] * image.height) / transform[3],
                 y: ((viewportTest.height - transform[5] - transform[3]) * image.height) / transform[3],
                 width: image.width,
@@ -888,6 +882,8 @@ if (hasAlreadyParsed) {
             };
 
 // console.log(`    Image: ${image.width}×${image.height}`);
+
+            // Parse the text from the image.
 
             elements = elements.concat(await parseImage(image, bounds));
             if (global.gc)
@@ -913,7 +909,7 @@ if (hasAlreadyParsed) {
 // reconstructedImage.write(`C:\\Temp\\Murray Bridge\\Reconstructed\\Reconstructed.${fileName}.Page${index + 1}.png`);
 
     console.log(`Saving the elements for page ${index + 1} of ${fileName}.`);
-    fs.writeFileSync(`C:\\Temp\\Murray Bridge\\Test Set\\${fileName}.Page${index + 1}.txt`, JSON.stringify(elements));
+    fs.writeFileSync(`C:\\Temp\\Murray Bridge\\Problem\\${fileName}.Page${index + 1}.txt`, JSON.stringify(elements));
     continue;
 }
 
@@ -933,6 +929,16 @@ if (hasAlreadyParsed) {
             // as the text may possibly be spread across one, two or three elements (allow for
             // all these possibilities).
 
+            // let startText = condenseText(startElement);
+            // if (startText === "dev") {
+            //     startElement = getRightElement(elements, startElement);
+            //     startText = condenseText(startElement);
+            //     if (startText !== "app")
+            //         continue;  // not "Dev App"
+            // } else if (startText !== "devapp") {
+            //     continue;  // not "Dev App"
+            // }
+
             let startText = condenseText(startElement);
             if (startText === "dev") {
                 startElement = getRightElement(elements, startElement);
@@ -940,7 +946,7 @@ if (hasAlreadyParsed) {
                 if (startText === "app") {
                     startElement = getRightElement(elements, startElement);
                     startText = condenseText(startElement);
-                    if (startText !== "no")
+                    if (startText !== "no" && startText !== "n0" && startText !== "n°" && startText !== "\"o" && startText !== "\"0" && startText !== "\"°")
                         continue;  // not "Dev App No."
                 } else if (startText !== "appno") {
                     continue;  // not "Dev App No."
@@ -1058,60 +1064,60 @@ if (false) {
 }
 
 let selectedPdfUrls = [
-    "http://www.murraybridge.sa.gov.au/webdata/resources/files/Crystal%20Report%20-%20DevApp%20July%202018.pdf",
-    "http://www.murraybridge.sa.gov.au/webdata/resources/files/Crystal%20Report%20-%20DevApp%20June%202018.pdf",
-    "http://www.murraybridge.sa.gov.au/webdata/resources/files/Crystal%20Report%20-%20DevApp%20May%202018.pdf",
-    "http://www.murraybridge.sa.gov.au/webdata/resources/files/Development%20Decisions%20April%202018-1.pdf",
-    "http://www.murraybridge.sa.gov.au/webdata/resources/files/Crystal%20Report%20-%20DevApp%20February%202018.pdf",
-    "http://www.murraybridge.sa.gov.au/webdata/resources/files/Crystal%20Report%20-%20DevApp%20January%202018.pdf",
-    "http://www.murraybridge.sa.gov.au/webdata/resources/files/December%202017.pdf", 
-    "http://www.murraybridge.sa.gov.au/webdata/resources/files/Crystal%20Report%20-%20DevApp%20November%202017.pdf",
-    "http://www.murraybridge.sa.gov.au/webdata/resources/files/Crystal%20Report%20-%20DevApp%20October%202017.pdf", 
-    "http://www.murraybridge.sa.gov.au/webdata/resources/files/Crystal%20Report%20-%20DevApp%20September%202017.pdf", 
-    "http://www.murraybridge.sa.gov.au/webdata/resources/files/Crystal%20Report%20-%20DevApp%20August%202017.pdf",
-    "http://www.murraybridge.sa.gov.au/webdata/resources/files/Crystal%20Report%20-%20DevApp%20July%202017.pdf", 
-    "http://www.murraybridge.sa.gov.au/webdata/resources/files/Crystal%20Report%20-%20DevApp%20June%202017.pdf",
-    "http://www.murraybridge.sa.gov.au/webdata/resources/files/Crystal%20Report%20-%20DevApp%20May%202017.pdf",
-    "http://www.murraybridge.sa.gov.au/webdata/resources/files/Crystal%20Report%20-%20DevApp%20April%202017-1.pdf",
-    "http://www.murraybridge.sa.gov.au/webdata/resources/files/Crystal%20Report%20-%20DevApp%20April%202017.pdf", 
-    "http://www.murraybridge.sa.gov.au/webdata/resources/files/Crystal%20Report%20-%20DevApp%20February%202017.pdf", 
-    "http://www.murraybridge.sa.gov.au/webdata/resources/files/Crystal%20Report%20-%20DevApp%20January%202017.pdf",
-    "http://www.murraybridge.sa.gov.au/webdata/resources/files/Crystal%20Report%20-%20DevApp%20December%202016.pdf",
-    "http://www.murraybridge.sa.gov.au/webdata/resources/files/Crystal%20Report%20-%20DevApp%20November%202016.pdf",  // crashed on this PDF 01-Sep-2018
-    "http://www.murraybridge.sa.gov.au/webdata/resources/files/Crystal%20Report%20-%20DevApp%20October%202016.pdf",  // crashed on this PDF 10-Sep-2018
-    "http://www.murraybridge.sa.gov.au/webdata/resources/files/Crystal%20Report%20-%20DevApp%20September%202016.pdf", 
-    "http://www.murraybridge.sa.gov.au/webdata/resources/files/Crystal%20Report%20-%20DevApp%20August%202016.pdf",  // crashed on this PDF 11-Sep-2018
-    "http://www.murraybridge.sa.gov.au/webdata/resources/files/Crystal%20Report%20-%20DevApp%20July%202016.pdf", 
-    "http://www.murraybridge.sa.gov.au/webdata/resources/files/Crystal%20Report%20-%20DevApp%20June%202016.pdf", 
-    "http://www.murraybridge.sa.gov.au/webdata/resources/files/Crystal%20Report%20-%20DevApp%20May%202016.pdf", 
-    "http://www.murraybridge.sa.gov.au/webdata/resources/files/Crystal%20Report%20-%20DevApp%20April%202016.pdf",
-    "http://www.murraybridge.sa.gov.au/webdata/resources/files/Crystal%20Report%20-%20DevApp%20March%202016.pdf", 
-    "http://www.murraybridge.sa.gov.au/webdata/resources/files/Crystal%20Report%20-%20DevApp%20February%202016.pdf",
-    "http://www.murraybridge.sa.gov.au/webdata/resources/files/Crystal%20Report%20-%20DevApp%20January%202016.pdf",
-    "http://www.murraybridge.sa.gov.au/webdata/resources/files/Crystal%20Report%20-%20DevApp%20November%202015.pdf",
-    "http://www.murraybridge.sa.gov.au/webdata/resources/files/Crystal%20Report%20-%20DevApp%20October%202015.pdf",
-    "http://www.murraybridge.sa.gov.au/webdata/resources/files/Crystal%20Report%20-%20DevAppSeptember%202015.pdf",
-    "http://www.murraybridge.sa.gov.au/webdata/resources/files/Crystal%20Report%20-%20DevApp%20August%202015.pdf",
-    "http://www.murraybridge.sa.gov.au/webdata/resources/files/Crystal%20Report%20-%20DevApp%20July%202015.pdf", 
-    "http://www.murraybridge.sa.gov.au/webdata/resources/files/Crystam%20Report%20-%20DevApproval%20June%202015.pdf",
-    "http://www.murraybridge.sa.gov.au/webdata/resources/files/Crystal%20Report%20-%20DevApp%20May%202015.pdf",
-    "http://www.murraybridge.sa.gov.au/webdata/resources/files/Crystal%20Report%20-%20DevApp%20April%202015.pdf",
-    "http://www.murraybridge.sa.gov.au/webdata/resources/files/Crystal%20Report%20-%20DevApp%20March%202015.pdf",
-    "http://www.murraybridge.sa.gov.au/webdata/resources/files/Crystal%20Report%20-%20DevApp%20February%202015.pdf", 
-    "http://www.murraybridge.sa.gov.au/webdata/resources/files/Crystal%20Report%20-%20DevApp%20January%202015.pdf", 
-    "http://www.murraybridge.sa.gov.au/webdata/resources/files/Crystal%20Report%20-%20DevApp%20November%202014.pdf", 
-    "http://www.murraybridge.sa.gov.au/webdata/resources/files/Crystal%20Report%20-%20DevApp%20October%202014.pdf", 
-    "http://www.murraybridge.sa.gov.au/webdata/resources/files/Crystal%20Report%20-%20DevApp%20September%202014.pdf", 
-    "http://www.murraybridge.sa.gov.au/webdata/resources/files/Crystal%20Report%20-%20DevApp%20August%202014.pdf", 
-    "http://www.murraybridge.sa.gov.au/webdata/resources/files/Crystal%20Report%20-%20DevApp%20July%202014.pdf", 
-    "http://www.murraybridge.sa.gov.au/webdata/resources/files/Crystal%20Report%20-%20DevApp%20June%202014.pdf", 
-    "http://www.murraybridge.sa.gov.au/webdata/resources/files/Crystal%20Report%20-%20DevApp%20May%202014.pdf", 
-    "http://www.murraybridge.sa.gov.au/webdata/resources/files/Crystal%20Report%20-%20DevApp%20April%202014.pdf", 
-    "http://www.murraybridge.sa.gov.au/webdata/resources/files/Crystal%20Report%20-%20DevApp%20March%202014.pdf", 
-    "http://www.murraybridge.sa.gov.au/webdata/resources/files/Crystal%20Report%20-%20DevApp%20February%202014.pdf",
-    "http://www.murraybridge.sa.gov.au/webdata/resources/files/Crystal%20Report%20-%20DevApp%20January%202014.pdf",
-    "http://www.murraybridge.sa.gov.au/webdata/resources/files/Crystal%20Report%20-%20DevApproval%20November%202013.pdf",
-    "http://www.murraybridge.sa.gov.au/webdata/resources/files/Crystal%20Reports%20-%20DevApproval%20October%202013.pdf"
+    // "http://www.murraybridge.sa.gov.au/webdata/resources/files/Crystal%20Report%20-%20DevApp%20July%202018.pdf",
+    // "http://www.murraybridge.sa.gov.au/webdata/resources/files/Crystal%20Report%20-%20DevApp%20June%202018.pdf",
+    // "http://www.murraybridge.sa.gov.au/webdata/resources/files/Crystal%20Report%20-%20DevApp%20May%202018.pdf",
+    // "http://www.murraybridge.sa.gov.au/webdata/resources/files/Development%20Decisions%20April%202018-1.pdf",
+    // "http://www.murraybridge.sa.gov.au/webdata/resources/files/Crystal%20Report%20-%20DevApp%20February%202018.pdf",
+    // "http://www.murraybridge.sa.gov.au/webdata/resources/files/Crystal%20Report%20-%20DevApp%20January%202018.pdf",
+    // "http://www.murraybridge.sa.gov.au/webdata/resources/files/December%202017.pdf", 
+    // "http://www.murraybridge.sa.gov.au/webdata/resources/files/Crystal%20Report%20-%20DevApp%20November%202017.pdf",
+    // "http://www.murraybridge.sa.gov.au/webdata/resources/files/Crystal%20Report%20-%20DevApp%20October%202017.pdf", 
+    // "http://www.murraybridge.sa.gov.au/webdata/resources/files/Crystal%20Report%20-%20DevApp%20September%202017.pdf", 
+    // "http://www.murraybridge.sa.gov.au/webdata/resources/files/Crystal%20Report%20-%20DevApp%20August%202017.pdf",
+    // "http://www.murraybridge.sa.gov.au/webdata/resources/files/Crystal%20Report%20-%20DevApp%20July%202017.pdf", 
+    // "http://www.murraybridge.sa.gov.au/webdata/resources/files/Crystal%20Report%20-%20DevApp%20June%202017.pdf",
+    // "http://www.murraybridge.sa.gov.au/webdata/resources/files/Crystal%20Report%20-%20DevApp%20May%202017.pdf",
+    // "http://www.murraybridge.sa.gov.au/webdata/resources/files/Crystal%20Report%20-%20DevApp%20April%202017-1.pdf",
+    // "http://www.murraybridge.sa.gov.au/webdata/resources/files/Crystal%20Report%20-%20DevApp%20April%202017.pdf", 
+    // "http://www.murraybridge.sa.gov.au/webdata/resources/files/Crystal%20Report%20-%20DevApp%20February%202017.pdf", 
+    // "http://www.murraybridge.sa.gov.au/webdata/resources/files/Crystal%20Report%20-%20DevApp%20January%202017.pdf",
+    // "http://www.murraybridge.sa.gov.au/webdata/resources/files/Crystal%20Report%20-%20DevApp%20December%202016.pdf",
+    // "http://www.murraybridge.sa.gov.au/webdata/resources/files/Crystal%20Report%20-%20DevApp%20November%202016.pdf",  // crashed on this PDF 01-Sep-2018
+    // "http://www.murraybridge.sa.gov.au/webdata/resources/files/Crystal%20Report%20-%20DevApp%20October%202016.pdf",  // crashed on this PDF 10-Sep-2018
+    // "http://www.murraybridge.sa.gov.au/webdata/resources/files/Crystal%20Report%20-%20DevApp%20September%202016.pdf", 
+    // "http://www.murraybridge.sa.gov.au/webdata/resources/files/Crystal%20Report%20-%20DevApp%20August%202016.pdf",  // crashed on this PDF 11-Sep-2018
+    // "http://www.murraybridge.sa.gov.au/webdata/resources/files/Crystal%20Report%20-%20DevApp%20July%202016.pdf", 
+    // "http://www.murraybridge.sa.gov.au/webdata/resources/files/Crystal%20Report%20-%20DevApp%20June%202016.pdf", 
+    // "http://www.murraybridge.sa.gov.au/webdata/resources/files/Crystal%20Report%20-%20DevApp%20May%202016.pdf", 
+    // "http://www.murraybridge.sa.gov.au/webdata/resources/files/Crystal%20Report%20-%20DevApp%20April%202016.pdf",  // try this one
+    // "http://www.murraybridge.sa.gov.au/webdata/resources/files/Crystal%20Report%20-%20DevApp%20March%202016.pdf", 
+    // "http://www.murraybridge.sa.gov.au/webdata/resources/files/Crystal%20Report%20-%20DevApp%20February%202016.pdf",
+    // "http://www.murraybridge.sa.gov.au/webdata/resources/files/Crystal%20Report%20-%20DevApp%20January%202016.pdf",
+    // "http://www.murraybridge.sa.gov.au/webdata/resources/files/Crystal%20Report%20-%20DevApp%20November%202015.pdf",  // images not parsed 20-Sep-2018
+    // "http://www.murraybridge.sa.gov.au/webdata/resources/files/Crystal%20Report%20-%20DevApp%20October%202015.pdf",
+    "http://www.murraybridge.sa.gov.au/webdata/resources/files/Crystal%20Report%20-%20DevAppSeptember%202015.pdf",  // images not parsed 20-Sep-2018
+    // "http://www.murraybridge.sa.gov.au/webdata/resources/files/Crystal%20Report%20-%20DevApp%20August%202015.pdf",  // images not parsed 20-Sep-2018
+    // "http://www.murraybridge.sa.gov.au/webdata/resources/files/Crystal%20Report%20-%20DevApp%20July%202015.pdf",  // images not parsed 20-Sep-2018
+    // "http://www.murraybridge.sa.gov.au/webdata/resources/files/Crystam%20Report%20-%20DevApproval%20June%202015.pdf",
+    // "http://www.murraybridge.sa.gov.au/webdata/resources/files/Crystal%20Report%20-%20DevApp%20May%202015.pdf",
+    // "http://www.murraybridge.sa.gov.au/webdata/resources/files/Crystal%20Report%20-%20DevApp%20April%202015.pdf",
+    // "http://www.murraybridge.sa.gov.au/webdata/resources/files/Crystal%20Report%20-%20DevApp%20March%202015.pdf",
+    // "http://www.murraybridge.sa.gov.au/webdata/resources/files/Crystal%20Report%20-%20DevApp%20February%202015.pdf", 
+    // "http://www.murraybridge.sa.gov.au/webdata/resources/files/Crystal%20Report%20-%20DevApp%20January%202015.pdf", 
+    // "http://www.murraybridge.sa.gov.au/webdata/resources/files/Crystal%20Report%20-%20DevApp%20November%202014.pdf"  // images not parsed 20-Sep-2018
+    // "http://www.murraybridge.sa.gov.au/webdata/resources/files/Crystal%20Report%20-%20DevApp%20October%202014.pdf", 
+    // "http://www.murraybridge.sa.gov.au/webdata/resources/files/Crystal%20Report%20-%20DevApp%20September%202014.pdf", 
+    // "http://www.murraybridge.sa.gov.au/webdata/resources/files/Crystal%20Report%20-%20DevApp%20August%202014.pdf", 
+    // "http://www.murraybridge.sa.gov.au/webdata/resources/files/Crystal%20Report%20-%20DevApp%20July%202014.pdf", 
+    // "http://www.murraybridge.sa.gov.au/webdata/resources/files/Crystal%20Report%20-%20DevApp%20June%202014.pdf", 
+    // "http://www.murraybridge.sa.gov.au/webdata/resources/files/Crystal%20Report%20-%20DevApp%20May%202014.pdf", 
+    // "http://www.murraybridge.sa.gov.au/webdata/resources/files/Crystal%20Report%20-%20DevApp%20April%202014.pdf", 
+    // "http://www.murraybridge.sa.gov.au/webdata/resources/files/Crystal%20Report%20-%20DevApp%20March%202014.pdf", 
+    // "http://www.murraybridge.sa.gov.au/webdata/resources/files/Crystal%20Report%20-%20DevApp%20February%202014.pdf",
+    // "http://www.murraybridge.sa.gov.au/webdata/resources/files/Crystal%20Report%20-%20DevApp%20January%202014.pdf",
+    // "http://www.murraybridge.sa.gov.au/webdata/resources/files/Crystal%20Report%20-%20DevApproval%20November%202013.pdf",
+    // "http://www.murraybridge.sa.gov.au/webdata/resources/files/Crystal%20Reports%20-%20DevApproval%20October%202013.pdf"
 ];
 
     for (let pdfUrl of selectedPdfUrls) {
