@@ -426,7 +426,7 @@ if (builderElement === undefined)
     }
 
     let applicationNumber = getRightRowText(elements, startElement, middleElement).trim().replace(/\s/g, "");
-    applicationNumber = applicationNumber.replace(/[IlL\[\]\|’,]/g, "/");  // for example, converts "17I2017" to "17/2017"
+    applicationNumber = applicationNumber.replace(/[IlL\[\]\|’,!]/g, "/");  // for example, converts "17I2017" to "17/2017"
 
     if (applicationNumber === "") {
         console.log("Could not find the application number on the PDF page for the current development application.  The development application will be ignored.");
@@ -550,6 +550,8 @@ for (let element of addressElements)
             }
         }
     }
+    
+    // If the address starts with a suburb then there may be a street name on the line above.
 
 console.log("-----Address elements after:");
 for (let element of addressElements)
@@ -855,6 +857,7 @@ if (hasAlreadyParsed) {
     elements = JSON.parse(fs.readFileSync(`C:\\Temp\\Murray Bridge\\Test Set\\${fileName}.Page${index + 1}.txt`, "utf8"));
 } else {
     console.log("Parsing using slow approach.");
+    console.log(`Rotation for page ${index + 1}: ${page.rotate}`);
         for (let index = 0; index < operators.fnArray.length; index++) {
             if (operators.fnArray[index] !== pdfjs.OPS.paintImageXObject && operators.fnArray[index] !== pdfjs.OPS.paintImageMaskXObject)
                 continue;
@@ -913,8 +916,8 @@ if (hasAlreadyParsed) {
 // console.log(`Writing reconstructed image for page ${index + 1} of ${fileName}.`);
 // reconstructedImage.write(`C:\\Temp\\Murray Bridge\\Reconstructed\\Reconstructed.${fileName}.Page${index + 1}.png`);
 
-    console.log(`Saving the elements for page ${index + 1} of ${fileName}.`);
-    fs.writeFileSync(`C:\\Temp\\Murray Bridge\\Test Set\\${fileName}.Page${index + 1}.txt`, JSON.stringify(elements));
+//    console.log(`Saving the elements for page ${index + 1} of ${fileName}.`);
+//    fs.writeFileSync(`C:\\Temp\\Murray Bridge\\Test Set\\${fileName}.Page${index + 1}.txt`, JSON.stringify(elements));
     continue;
 }
 
@@ -933,16 +936,6 @@ if (hasAlreadyParsed) {
             // Check that the elements next to "Dev" produce the text "Dev App No.".  Take care
             // as the text may possibly be spread across one, two or three elements (allow for
             // all these possibilities).
-
-            // let startText = condenseText(startElement);
-            // if (startText === "dev") {
-            //     startElement = getRightElement(elements, startElement);
-            //     startText = condenseText(startElement);
-            //     if (startText !== "app")
-            //         continue;  // not "Dev App"
-            // } else if (startText !== "devapp") {
-            //     continue;  // not "Dev App"
-            // }
 
             let startText = condenseText(startElement);
             if (startText === "dev") {
@@ -1096,34 +1089,34 @@ let selectedPdfUrls = [
     // "http://www.murraybridge.sa.gov.au/webdata/resources/files/Crystal%20Report%20-%20DevApp%20July%202016.pdf", 
     // "http://www.murraybridge.sa.gov.au/webdata/resources/files/Crystal%20Report%20-%20DevApp%20June%202016.pdf", 
     // "http://www.murraybridge.sa.gov.au/webdata/resources/files/Crystal%20Report%20-%20DevApp%20May%202016.pdf", 
-    // "http://www.murraybridge.sa.gov.au/webdata/resources/files/Crystal%20Report%20-%20DevApp%20April%202016.pdf",  // try this one
+    // "http://www.murraybridge.sa.gov.au/webdata/resources/files/Crystal%20Report%20-%20DevApp%20April%202016.pdf",
     // "http://www.murraybridge.sa.gov.au/webdata/resources/files/Crystal%20Report%20-%20DevApp%20March%202016.pdf", 
     // "http://www.murraybridge.sa.gov.au/webdata/resources/files/Crystal%20Report%20-%20DevApp%20February%202016.pdf",
     "http://www.murraybridge.sa.gov.au/webdata/resources/files/Crystal%20Report%20-%20DevApp%20January%202016.pdf",
     // "http://www.murraybridge.sa.gov.au/webdata/resources/files/Crystal%20Report%20-%20DevApp%20November%202015.pdf",  // images not parsed 20-Sep-2018
-    // "http://www.murraybridge.sa.gov.au/webdata/resources/files/Crystal%20Report%20-%20DevApp%20October%202015.pdf",
+    // "http://www.murraybridge.sa.gov.au/webdata/resources/files/Crystal%20Report%20-%20DevApp%20October%202015.pdf",  // rotated 270 degrees
     // "http://www.murraybridge.sa.gov.au/webdata/resources/files/Crystal%20Report%20-%20DevAppSeptember%202015.pdf",  // images not parsed 20-Sep-2018
     // "http://www.murraybridge.sa.gov.au/webdata/resources/files/Crystal%20Report%20-%20DevApp%20August%202015.pdf",  // images not parsed 20-Sep-2018
     // "http://www.murraybridge.sa.gov.au/webdata/resources/files/Crystal%20Report%20-%20DevApp%20July%202015.pdf",  // images not parsed 20-Sep-2018
-    // "http://www.murraybridge.sa.gov.au/webdata/resources/files/Crystam%20Report%20-%20DevApproval%20June%202015.pdf",
-    // "http://www.murraybridge.sa.gov.au/webdata/resources/files/Crystal%20Report%20-%20DevApp%20May%202015.pdf",
-    // "http://www.murraybridge.sa.gov.au/webdata/resources/files/Crystal%20Report%20-%20DevApp%20April%202015.pdf",
-    // "http://www.murraybridge.sa.gov.au/webdata/resources/files/Crystal%20Report%20-%20DevApp%20March%202015.pdf",
-    // "http://www.murraybridge.sa.gov.au/webdata/resources/files/Crystal%20Report%20-%20DevApp%20February%202015.pdf", 
-    // "http://www.murraybridge.sa.gov.au/webdata/resources/files/Crystal%20Report%20-%20DevApp%20January%202015.pdf", 
-    // "http://www.murraybridge.sa.gov.au/webdata/resources/files/Crystal%20Report%20-%20DevApp%20November%202014.pdf"  // images not parsed 20-Sep-2018
-    // "http://www.murraybridge.sa.gov.au/webdata/resources/files/Crystal%20Report%20-%20DevApp%20October%202014.pdf", 
-    // "http://www.murraybridge.sa.gov.au/webdata/resources/files/Crystal%20Report%20-%20DevApp%20September%202014.pdf", 
-    // "http://www.murraybridge.sa.gov.au/webdata/resources/files/Crystal%20Report%20-%20DevApp%20August%202014.pdf", 
-    // "http://www.murraybridge.sa.gov.au/webdata/resources/files/Crystal%20Report%20-%20DevApp%20July%202014.pdf", 
-    // "http://www.murraybridge.sa.gov.au/webdata/resources/files/Crystal%20Report%20-%20DevApp%20June%202014.pdf", 
-    // "http://www.murraybridge.sa.gov.au/webdata/resources/files/Crystal%20Report%20-%20DevApp%20May%202014.pdf", 
-    // "http://www.murraybridge.sa.gov.au/webdata/resources/files/Crystal%20Report%20-%20DevApp%20April%202014.pdf", 
-    // "http://www.murraybridge.sa.gov.au/webdata/resources/files/Crystal%20Report%20-%20DevApp%20March%202014.pdf", 
-    // "http://www.murraybridge.sa.gov.au/webdata/resources/files/Crystal%20Report%20-%20DevApp%20February%202014.pdf",
-    // "http://www.murraybridge.sa.gov.au/webdata/resources/files/Crystal%20Report%20-%20DevApp%20January%202014.pdf",
-    // "http://www.murraybridge.sa.gov.au/webdata/resources/files/Crystal%20Report%20-%20DevApproval%20November%202013.pdf",
-    // "http://www.murraybridge.sa.gov.au/webdata/resources/files/Crystal%20Reports%20-%20DevApproval%20October%202013.pdf"
+    // "http://www.murraybridge.sa.gov.au/webdata/resources/files/Crystam%20Report%20-%20DevApproval%20June%202015.pdf",  // rotated 270 degrees
+    // "http://www.murraybridge.sa.gov.au/webdata/resources/files/Crystal%20Report%20-%20DevApp%20May%202015.pdf",  // text
+    // "http://www.murraybridge.sa.gov.au/webdata/resources/files/Crystal%20Report%20-%20DevApp%20April%202015.pdf",  // text
+    // "http://www.murraybridge.sa.gov.au/webdata/resources/files/Crystal%20Report%20-%20DevApp%20March%202015.pdf",  // text
+    // "http://www.murraybridge.sa.gov.au/webdata/resources/files/Crystal%20Report%20-%20DevApp%20February%202015.pdf",  // text
+    // "http://www.murraybridge.sa.gov.au/webdata/resources/files/Crystal%20Report%20-%20DevApp%20January%202015.pdf",  // text
+    // "http://www.murraybridge.sa.gov.au/webdata/resources/files/Crystal%20Report%20-%20DevApp%20November%202014.pdf",  // images not parsed 20-Sep-2018
+    // "http://www.murraybridge.sa.gov.au/webdata/resources/files/Crystal%20Report%20-%20DevApp%20October%202014.pdf",  // text
+    // "http://www.murraybridge.sa.gov.au/webdata/resources/files/Crystal%20Report%20-%20DevApp%20September%202014.pdf",  // text
+    // "http://www.murraybridge.sa.gov.au/webdata/resources/files/Crystal%20Report%20-%20DevApp%20August%202014.pdf",  // text
+    // "http://www.murraybridge.sa.gov.au/webdata/resources/files/Crystal%20Report%20-%20DevApp%20July%202014.pdf",  // text
+    // "http://www.murraybridge.sa.gov.au/webdata/resources/files/Crystal%20Report%20-%20DevApp%20June%202014.pdf",  // text
+    // "http://www.murraybridge.sa.gov.au/webdata/resources/files/Crystal%20Report%20-%20DevApp%20May%202014.pdf",  // text
+    // "http://www.murraybridge.sa.gov.au/webdata/resources/files/Crystal%20Report%20-%20DevApp%20April%202014.pdf",  // text
+    // "http://www.murraybridge.sa.gov.au/webdata/resources/files/Crystal%20Report%20-%20DevApp%20March%202014.pdf",  // text
+    // "http://www.murraybridge.sa.gov.au/webdata/resources/files/Crystal%20Report%20-%20DevApp%20February%202014.pdf",  // text
+    // "http://www.murraybridge.sa.gov.au/webdata/resources/files/Crystal%20Report%20-%20DevApp%20January%202014.pdf",  // text
+    // "http://www.murraybridge.sa.gov.au/webdata/resources/files/Crystal%20Report%20-%20DevApproval%20November%202013.pdf",  // text
+    // "http://www.murraybridge.sa.gov.au/webdata/resources/files/Crystal%20Reports%20-%20DevApproval%20October%202013.pdf"  // text
 ];
 
     for (let pdfUrl of selectedPdfUrls) {
