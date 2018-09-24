@@ -265,23 +265,26 @@ function readAddressInformation() {
 // Formats (and corrects) an address.
 
 function formatAddress(address: string) {
-    if (address.trim() === "")
-        return "";
+    address = address.trim();
+    if (address === "")
+        return { text: "", hasSuburb: false, hasStreet: false };
 
     let tokens = address.split(" ");
 
     // It is common for an invalid postcode of "0" to appear on the end of an address.  Remove
-    // this if it is present.  For example, "Bremer Range RD CALLINGTON 0".   
+    // this if it is present.  For example, "Bremer Range RD CALLINGTON 0".  Remove the post code
+    // because this will be derived based on the suburb.
 
     let postCode = tokens[tokens.length - 1];
-    if (/^[0-9]{4}$/.test(postCode))
+    if (/^[0-9]{4}$/.test(postCode) || postCode === "O" || postCode === "0" || postCode === "D")
         tokens.pop();
-    else if (postCode === "O" || postCode === "0" || postCode === "D") {
-        postCode = "";
-        tokens.pop();
-    } else
-        postCode = "";
 
+    // Remove the state abbreviation (this will be determined using the suburb).
+
+    let state = tokens[tokens.length - 1];
+    if (didyoumean(state, [ "SA" ], { caseSensitive: true, returnType: "first-closest-match", thresholdType: "edit-distance", threshold: 1, trimSpace: true }) !== null)
+        tokens.pop();
+    
     // Pop tokens from the end of the array until a valid suburb name is encountered (allowing
     // for a few spelling errors).
 
@@ -296,7 +299,7 @@ function formatAddress(address: string) {
     }
 
     if (suburbName === null)  // suburb name not found (or not recognised)
-        return tokens.join(" ");
+        return { text: address, hasSuburb: false, hasStreet: false };
 
     // Expand an abbreviated street suffix.  For example, expand "RD" to "Road".
 
@@ -306,21 +309,11 @@ function formatAddress(address: string) {
     // Allow minor spelling corrections in the remaining tokens to construct a street name.
 
     let streetName = (tokens.join(" ") + " " + streetSuffix).trim();
-    let streetSuburbNames = undefined;
     let streetNameMatch = didyoumean(streetName, Object.keys(StreetNames), { caseSensitive: false, returnType: "first-closest-match", thresholdType: "edit-distance", threshold: 2, trimSpace: true });
-    if (streetNameMatch !== null) {
+    if (streetNameMatch !== null)
         streetName = streetNameMatch;
-        streetSuburbNames = StreetNames[streetNameMatch];
-    }
 
-    console.log(`Address: ${address}`);
-    console.log(`  Street Name: ${streetName}`)
-    console.log(`  Street Suffix: ${streetSuffix}`)
-    console.log(`  Suburb Name: ${suburbName}`);
-    console.log(`  Street Suburb Names: ${streetSuburbNames}`);
-    console.log(`  Post Code: ${postCode}`);
-
-    return (streetName + ((streetName === "") ? "" : ", ") + suburbName).trim();
+    return { text: (streetName + ((streetName === "") ? "" : ", ") + suburbName).trim(), hasSuburb: true, hasStreet: (streetName.length > 0) };
 }
 
 // Gets the text downwards in a rectangle, where the rectangle is delineated by the positions in
@@ -364,6 +357,77 @@ function getDownText(elements: Element[], topText: string, rightText: string, bo
     return intersectingElements.map(element => element.text).join(" ").trim().replace(/\s\s+/g, " ");
 }
 
+// Gets the elements on the line above (typically an address line).
+
+function getAboveElements(elements: Element[], belowElement: Element, middleElement: Element) {
+    // Find the elements above (at least a "line" above) the specified "below" element and to the
+    // left of the middleElement.  These elements correspond to address elements (assumed to be on
+    // one single line).
+
+    let addressElements = elements.filter(element =>
+        element.y < belowElement.y - belowElement.height &&
+        element.x < middleElement.x - 0.2 * middleElement.width);
+
+    // Find the lowest address element (this is assumed to form part of the single line of the
+    // address).
+
+    let addressBottomElement = addressElements.reduce((previous, current) => ((previous === undefined || current.y > previous.y) ? current : previous), undefined);
+    if (addressBottomElement === undefined)
+        return [];
+
+console.log(`addressBottomElement is (${addressBottomElement.x},${addressBottomElement.y}) width=${addressBottomElement.width} height=${addressBottomElement.height}`);
+
+    // Obtain all elements on the same "line" as the lowest address element.
+
+console.log(`middleElement is (x=${middleElement.x},y=${middleElement.y}) width=${middleElement.width} height=${middleElement.height}`);
+
+    addressElements = elements.filter(element =>
+        element.y < belowElement.y - belowElement.height &&
+        element.x < middleElement.x - 0.2 * middleElement.width &&
+        element.y >= addressBottomElement.y - Math.max(element.height, addressBottomElement.height));
+
+    // Sort the address elements by Y co-ordinate and then by X co-ordinate (the Math.max
+    // expressions exist to allow for the Y co-ordinates of elements to be not exactly aligned).
+
+    let elementComparer = (a, b) => (a.y > b.y + Math.max(a.height, b.height)) ? 1 : ((a.y < b.y - Math.max(a.height, b.height)) ? -1 : ((a.x > b.x) ? 1 : ((a.x < b.x) ? -1 : 0)));
+    addressElements.sort(elementComparer);
+
+    // Remove any smaller elements (say less than half the area) that are 90% or more encompassed
+    // by another element (this then avoids some artefacts of the text recognition, ie. elements
+    // such as "r~" and "-" that can otherwise overlap the main text).
+
+console.log("-----Address elements before:");
+for (let element of addressElements)
+    console.log(`    [${element.text}] (${element.x},${element.y}) ${element.width}×${element.height} confidence=${Math.round((element as any).confidence)}%`);
+
+    addressElements = addressElements.filter(element =>
+        !addressElements.some(otherElement =>
+            getArea(otherElement) > 2 * getArea(element) &&  // smaller element (ie. the other element is at least double the area)
+            getArea(element) > 0 &&
+            getArea(constructIntersection(element, otherElement)) / getArea(element) > 0.9
+        )
+    );
+
+    // Remove any address elements that occur after a sizeable gap.  Any such elements are very
+    // likely part of the description (not the address) because sometimes the description is
+    // moved to the left, closer to the address (see "Crystal Report - DevAppSeptember 2015.pdf").
+
+    for (let index = 1; index < addressElements.length; index++) {
+        if (addressElements[index].x - (addressElements[index - 1].x + addressElements[index - 1].width) > 50) {  // gap greater than 50 pixels
+            if (addressElements[index - 1].confidence >= 60 && addressElements[index].confidence >= 60) {  // avoid random marks and the edge of the paper being recognised as text
+                addressElements.length = index;  // remove the element and all following elements that appear after a large gap
+                break;
+            }
+        }
+    }
+    
+console.log("-----Address elements after:");
+for (let element of addressElements)
+    console.log(`    [${element.text}] (${element.x},${element.y}) ${element.width}×${element.height} confidence=${Math.round((element as any).confidence)}%`);
+
+    return addressElements;
+}
+
 // Parses the details from the elements associated with a single development application.
 
 function parseApplicationElements(elements: Element[], startElement: Element, informationUrl: string) {
@@ -399,7 +463,7 @@ console.log("Refactor assessment number logic to a separate function.");
     }
 
     if (assessmentNumberElement === undefined) {
-        console.log("Could not find the \"Assessment Number\" text on the PDF page for the current development application.  The development application will be ignored.");
+        console.log("Could not find the \"Assessment Number\" or \"Asses Num\" text on the PDF page for the current development application.  The development application will be ignored.");
         return undefined;
     }
 
@@ -488,83 +552,40 @@ console.log("Refactor description logic to a separate function.");
 
 console.log("Refactor address logic to a separate function.");
 
-    // Find the elements above (at least a "line" above) the "Assessment Number" text and to the
-    // left of the middleElement.  These elements correspond to the address (assumed to be on one
-    // single line).
-
-    let addressElements = elements.filter(element =>
-        element.y < assessmentNumberElement.y - assessmentNumberElement.height &&
-        element.x < middleElement.x - 0.2 * middleElement.width);
-
-    // Find the lowest address element (this is assumed to form part of the single line of the
-    // address).
-
-    let addressBottomElement = addressElements.reduce((previous, current) => ((previous === undefined || current.y > previous.y) ? current : previous), undefined);
-    if (addressBottomElement === undefined) {
-        console.log(`Application number ${applicationNumber} will be ignored because an address was not found (searching upwards from the "Assessment Number" text).`);
+    let addressElements = getAboveElements(elements, assessmentNumberElement, middleElement);
+    if (addressElements.length === 0) {
+        console.log(`Application number ${applicationNumber} will be ignored because an address was not found (searching upwards from the "Assessment Number" or \"Asses Num\" text).`);
         return undefined;
     }
-console.log(`addressBottomElement is (${addressBottomElement.x},${addressBottomElement.y}) width=${addressBottomElement.width} height=${addressBottomElement.height}`);
-
-    // Obtain all elements on the same "line" as the lowest address element.
-
-console.log(`assessmentNumberElement is (${assessmentNumberElement.x},${assessmentNumberElement.y}) width=${assessmentNumberElement.width} height=${assessmentNumberElement.height}`);
-console.log(`middleElement is (x=${middleElement.x},y=${middleElement.y}) width=${middleElement.width} height=${middleElement.height}`);
-
-    addressElements = elements.filter(element =>
-        element.y < assessmentNumberElement.y - assessmentNumberElement.height &&
-        element.x < middleElement.x - 0.2 * middleElement.width &&
-        element.y >= addressBottomElement.y - Math.max(element.height, addressBottomElement.height));
-
-    // Sort the address elements by Y co-ordinate and then by X co-ordinate (the Math.max
-    // expressions exist to allow for the Y co-ordinates of elements to be not exactly aligned).
-
-    elementComparer = (a, b) => (a.y > b.y + Math.max(a.height, b.height)) ? 1 : ((a.y < b.y - Math.max(a.height, b.height)) ? -1 : ((a.x > b.x) ? 1 : ((a.x < b.x) ? -1 : 0)));
-    addressElements.sort(elementComparer);
-
-    // Remove any smaller elements (say less than half the area) that are 90% or more encompassed
-    // by another element (this then avoids some artefacts of the text recognition, ie. elements
-    // such as "r~" and "-" that can otherwise overlap the main text).
-
-console.log("-----Address elements before:");
-for (let element of addressElements)
-    console.log(`    [${element.text}] (${element.x},${element.y}) ${element.width}×${element.height} confidence=${Math.round((element as any).confidence)}%`);
-
-    addressElements = addressElements.filter(element =>
-        !addressElements.some(otherElement =>
-            getArea(otherElement) > 2 * getArea(element) &&  // smaller element (ie. the other element is at least double the area)
-            getArea(element) > 0 &&
-            getArea(constructIntersection(element, otherElement)) / getArea(element) > 0.9
-        )
-    );
-
-    // Remove any address elements that occur after a sizeable gap.  Any such elements are very
-    // likely part of the description (not the address) because sometimes the description is
-    // moved to the left, closer to the address (see "Crystal Report - DevAppSeptember 2015.pdf").
-
-    for (let index = 1; index < addressElements.length; index++) {
-        if (addressElements[index].x - (addressElements[index - 1].x + addressElements[index - 1].width) > 50) {  // gap greater than 50 pixels
-            if (addressElements[index - 1].confidence >= 60 && addressElements[index].confidence >= 60) {  // avoid random marks and the edge of the paper being recognised as text
-                addressElements.length = index;  // remove the element and all following elements that appear after a large gap
-                break;
-            }
-        }
-    }
     
-    // If the address starts with a suburb then there may be a street name on the line above.
-
-console.log("-----Address elements after:");
-for (let element of addressElements)
-    console.log(`    [${element.text}] (${element.x},${element.y}) ${element.width}×${element.height} confidence=${Math.round((element as any).confidence)}%`);
-
     // Construct the address from the discovered address elements (and attempt to correct some
     // spelling errors).
 
     let address = addressElements.map(element => element.text).join(" ").trim().replace(/\s\s+/g, " ").replace(/ﬁ/g, "fi").replace(/ﬂ/g, "fl").replace(/\\\//g, "V");
-    if (address.startsWith("Dev Cost"))  // finding this text instead of an address indicates that there is not address present
+    if (address.startsWith("Dev Cost") || address.startsWith("LOT:") || address.startsWith("LOT ") || address.startsWith("HD:") || address.startsWith("HD "))  // finding this text instead of an address indicates that there is no address present
         return undefined;
-    address = formatAddress(address);
-    console.log(`Address: ${address}`);
+
+    // If the address starts with a suburb then there may be a street name on the line above.
+
+    let formattedAddress = formatAddress(address);
+    console.log(`Address Before: ${formattedAddress.text} (hasSuburb: ${formattedAddress.hasSuburb}, hasStreet: ${formattedAddress.hasStreet})`);
+
+    if (!formattedAddress.hasStreet) {
+        let streetElements = getAboveElements(elements, addressElements[0], middleElement);
+        if (streetElements.length > 0) {
+            let street = streetElements.map(element => element.text).join(" ").trim().replace(/\s\s+/g, " ").replace(/ﬁ/g, "fi").replace(/ﬂ/g, "fl").replace(/\\\//g, "V");
+            if (!street.startsWith("Dev Cost") && !street.startsWith("LOT:") && !street.startsWith("LOT ") && !street.startsWith("HD:") && !street.startsWith("HD ")) {  // finding this text instead of an address indicates that there is no address present
+                console.log(`Street: ${street}`);
+                formattedAddress = formatAddress(street + " " + formattedAddress.text);
+                console.log(`Address After: ${formattedAddress.text} (hasSuburb: ${formattedAddress.hasSuburb}, hasStreet: ${formattedAddress.hasStreet})`);
+            }
+        }
+    }
+
+    if (formattedAddress.text === "") {
+        console.log(`Application number ${applicationNumber} will be ignored because because an address could not be parsed from the text \"${address}\".`);
+        return undefined;
+    }
 
     // for (let element of elements)
     //     console.log(`[${Math.round(element.x)},${Math.round(element.y)}] ${element.text}`);
@@ -572,7 +593,7 @@ for (let element of addressElements)
 
     return {
         applicationNumber: applicationNumber,
-        address: address,
+        address: formattedAddress.text,
         description: ((description === "") ? "No description provided" : description),
         informationUrl: informationUrl,
         commentUrl: CommentUrl,
