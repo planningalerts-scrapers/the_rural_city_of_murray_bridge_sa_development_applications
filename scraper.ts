@@ -756,6 +756,36 @@ function segmentImageHorizontally(jimpImage: any, bounds: Rectangle) {
     return rectangles;
 }
 
+// Gets the record count number from the first page.
+
+function getRecordCount(elements: Element[], startElement: Element) {
+    let topmostY = (startElement === undefined) ? Number.MAX_VALUE : startElement.y;
+    
+    // Find the "Records" text (allowing for spelling errors).
+
+    let recordsElement = elements.find(element =>
+         element.y < topmostY &&
+         didyoumean(element.text, [ "Records" ], { caseSensitive: false, returnType: "first-closest-match", thresholdType: "edit-distance", threshold: 2, trimSpace: true }) !== null
+    );
+
+    // Get the number to the right of "Records".
+
+    if (recordsElement !== undefined) {
+        let recordNumberElement = elements.find(element =>
+            element.x > recordsElement.x + recordsElement.width &&
+            getVerticalOverlapPercentage(element, recordsElement) > 50
+        );
+    
+        if (recordNumberElement !== undefined) {
+            let recordCount = Number(recordNumberElement.text);  // returns NaN if invalid
+            if (!isNaN(recordCount))
+                return recordCount;
+        }
+    }
+
+    return -1;
+}
+
 // Converts image data from the PDF to a Jimp format image.
 
 let imageConvertCount = 0;
@@ -1016,31 +1046,8 @@ if (hasAlreadyParsed) {
         // applications are successfully parsed later.
 
         if (index === 0) {  // first page
-            let topmostY = Number.MAX_VALUE;
-            if (applicationElementGroups.length > 0 && applicationElementGroups[0].elements.length > 0)
-                topmostY = applicationElementGroups[0].elements[0].y;
-            
-            // Find the "Records" text (allowing for spelling errors).
-
-            let recordsElement = elements.find(element =>
-                 element.y < topmostY &&
-                 didyoumean(element.text, [ "Records" ], { caseSensitive: false, returnType: "first-closest-match", thresholdType: "edit-distance", threshold: 2, trimSpace: true }) !== null
-            );
-
-            // Get the number to the right of "Records".
-
-            if (recordsElement !== undefined) {
-                let recordNumberElement = elements.find(element =>
-                    element.x > recordsElement.x + recordsElement.width &&
-                    getVerticalOverlapPercentage(element, recordsElement) > 50
-                );
-            
-                if (recordNumberElement !== undefined) {
-                    let recordCount = Number(recordNumberElement.text);  // returns NaN if invalid
-                    if (!isNaN(recordCount))
-                        console.log(`Expected record count is ${recordCount}.`);
-                }
-            }
+            let recordCount = getRecordCount(elements, startElements[0]);
+            console.log(`Expected record count is ${recordCount}.`);
         }
 
         // Parse the development application from each group of elements (ie. a section of the
