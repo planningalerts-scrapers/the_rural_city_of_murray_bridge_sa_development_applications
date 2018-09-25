@@ -448,13 +448,13 @@ console.log("Refactor assessment number logic to a separate function.");
         didyoumean(element.text, [ "Assessment Number", "Asses Num" ], { caseSensitive: false, returnType: "first-closest-match", thresholdType: "edit-distance", threshold: 2, trimSpace: true }) !== null);
 
     if (assessmentNumberElement === undefined) {
-        // Find any occurrences of the text "Assessment".
+        // Find any occurrences of the text "Assessment" or "Asses".
 
         let assessmentElements = elements.filter(
             element => element.y > startElement.y &&
             didyoumean(element.text, [ "Assessment", "Asses" ], { caseSensitive: false, returnType: "first-closest-match", thresholdType: "edit-distance", threshold: 2, trimSpace: true }) !== null);
 
-        // Check if any of those occurrences of "Assessment" are followed by "Number".
+        // Check if any of those occurrences of "Assessment" are followed by "Number" or "Num".
 
         for (let assessmentElement of assessmentElements) {
             let assessmentRightElement = getRightElement(elements, assessmentElement);
@@ -1012,6 +1012,37 @@ if (hasAlreadyParsed) {
             applicationElementGroups.push({ startElement: startElements[index], elements: elements.filter(element => element.y >= rowTop && element.y + element.height < nextRowTop) });
         }
 
+        // The first page typically has a record count which can be used to determine if all
+        // applications are successfully parsed later.
+
+        if (index === 0) {  // first page
+            let topmostY = Number.MAX_VALUE;
+            if (applicationElementGroups.length > 0 && applicationElementGroups[0].elements.length > 0)
+                topmostY = applicationElementGroups[0].elements[0].y;
+            
+            // Find the "Records" text (allowing for spelling errors).
+
+            let recordsElement = elements.find(element =>
+                 element.y < topmostY &&
+                 didyoumean(element.text, [ "Records" ], { caseSensitive: false, returnType: "first-closest-match", thresholdType: "edit-distance", threshold: 2, trimSpace: true }) !== null
+            );
+
+            // Get the number to the right of "Records".
+
+            if (recordsElement !== undefined) {
+                let recordNumberElement = elements.find(element =>
+                    element.x > recordsElement.x + recordsElement.width &&
+                    getVerticalOverlapPercentage(element, recordsElement) > 50
+                );
+            
+                if (recordNumberElement !== undefined) {
+                    let recordCount = Number(recordNumberElement.text);  // returns NaN if invalid
+                    if (!isNaN(recordCount))
+                        console.log(`Expected record count is ${recordCount}.`);
+                }
+            }
+        }
+
         // Parse the development application from each group of elements (ie. a section of the
         // current page of the PDF document).
 
@@ -1090,7 +1121,7 @@ if (false) {
 
 let selectedPdfUrls = [
     // "http://www.murraybridge.sa.gov.au/webdata/resources/files/Crystal%20Report%20-%20DevApp%20July%202018.pdf",
-    "http://www.murraybridge.sa.gov.au/webdata/resources/files/Crystal%20Report%20-%20DevApp%20June%202018.pdf",
+    // "http://www.murraybridge.sa.gov.au/webdata/resources/files/Crystal%20Report%20-%20DevApp%20June%202018.pdf",
     // "http://www.murraybridge.sa.gov.au/webdata/resources/files/Crystal%20Report%20-%20DevApp%20May%202018.pdf",
     // "http://www.murraybridge.sa.gov.au/webdata/resources/files/Development%20Decisions%20April%202018-1.pdf",
     // "http://www.murraybridge.sa.gov.au/webdata/resources/files/Crystal%20Report%20-%20DevApp%20February%202018.pdf",
@@ -1117,7 +1148,7 @@ let selectedPdfUrls = [
     // "http://www.murraybridge.sa.gov.au/webdata/resources/files/Crystal%20Report%20-%20DevApp%20May%202016.pdf", 
     // "http://www.murraybridge.sa.gov.au/webdata/resources/files/Crystal%20Report%20-%20DevApp%20April%202016.pdf",
     // "http://www.murraybridge.sa.gov.au/webdata/resources/files/Crystal%20Report%20-%20DevApp%20March%202016.pdf", 
-    // "http://www.murraybridge.sa.gov.au/webdata/resources/files/Crystal%20Report%20-%20DevApp%20February%202016.pdf",
+    "http://www.murraybridge.sa.gov.au/webdata/resources/files/Crystal%20Report%20-%20DevApp%20February%202016.pdf",
     // "http://www.murraybridge.sa.gov.au/webdata/resources/files/Crystal%20Report%20-%20DevApp%20January%202016.pdf",
     // "http://www.murraybridge.sa.gov.au/webdata/resources/files/Crystal%20Report%20-%20DevApp%20November%202015.pdf",  // images not parsed 20-Sep-2018
     // "http://www.murraybridge.sa.gov.au/webdata/resources/files/Crystal%20Report%20-%20DevApp%20October%202015.pdf",  // rotated 270 degrees
