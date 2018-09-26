@@ -918,6 +918,11 @@ if (hasAlreadyParsed) {
 } else {
     console.log("Parsing using slow approach.");
     console.log(`Rotation for page ${index + 1}: ${page.rotate}`);
+        if (page.rotate !== 0) {
+            console.log(`Ignoring the page because it is rotated ${page.rotate}°.`);
+            continue;
+        }
+
         for (let index = 0; index < operators.fnArray.length; index++) {
             if (operators.fnArray[index] !== pdfjs.OPS.paintImageXObject && operators.fnArray[index] !== pdfjs.OPS.paintImageMaskXObject)
                 continue;
@@ -1135,7 +1140,7 @@ let selectedPdfUrls = [
     // "http://www.murraybridge.sa.gov.au/webdata/resources/files/Crystal%20Report%20-%20DevApp%20June%202018.pdf",
     // "http://www.murraybridge.sa.gov.au/webdata/resources/files/Crystal%20Report%20-%20DevApp%20May%202018.pdf",
     // "http://www.murraybridge.sa.gov.au/webdata/resources/files/Development%20Decisions%20April%202018-1.pdf",
-    // "http://www.murraybridge.sa.gov.au/webdata/resources/files/Crystal%20Report%20-%20DevApp%20February%202018.pdf",
+    "http://www.murraybridge.sa.gov.au/webdata/resources/files/Crystal%20Report%20-%20DevApp%20February%202018.pdf",
     // "http://www.murraybridge.sa.gov.au/webdata/resources/files/Crystal%20Report%20-%20DevApp%20January%202018.pdf",
     "http://www.murraybridge.sa.gov.au/webdata/resources/files/December%202017.pdf", 
     // "http://www.murraybridge.sa.gov.au/webdata/resources/files/Crystal%20Report%20-%20DevApp%20November%202017.pdf",
@@ -1198,6 +1203,7 @@ let selectedPdfUrls = [
         if (global.gc)
             global.gc();
 
+        console.log(`Inserting development applications into the database.`);
         for (let developmentApplication of developmentApplications)
             await insertRow(database, developmentApplication);
     }
