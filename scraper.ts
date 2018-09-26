@@ -262,60 +262,6 @@ function readAddressInformation() {
     }
 }
 
-// Formats (and corrects) an address.
-
-function formatAddress(address: string) {
-    address = address.trim();
-    if (address === "")
-        return { text: "", hasSuburb: false, hasStreet: false };
-
-    let tokens = address.split(" ");
-
-    // It is common for an invalid postcode of "0" to appear on the end of an address.  Remove
-    // this if it is present.  For example, "Bremer Range RD CALLINGTON 0".  Remove the post code
-    // because this will be derived based on the suburb.
-
-    let postCode = tokens[tokens.length - 1];
-    if (/^[0-9]{4}$/.test(postCode) || postCode === "O" || postCode === "0" || postCode === "D")
-        tokens.pop();
-
-    // Remove the state abbreviation (this will be determined using the suburb).
-
-    let state = tokens[tokens.length - 1];
-    if (didyoumean(state, [ "SA" ], { caseSensitive: true, returnType: "first-closest-match", thresholdType: "edit-distance", threshold: 1, trimSpace: true }) !== null)
-        tokens.pop();
-    
-    // Pop tokens from the end of the array until a valid suburb name is encountered (allowing
-    // for a few spelling errors).
-
-    let suburbName = null;
-    for (let index = 1; index <= 4; index++) {
-        let suburbNameMatch = didyoumean(tokens.slice(-index).join(" "), Object.keys(SuburbNames), { caseSensitive: false, returnType: "first-closest-match", thresholdType: "edit-distance", threshold: 2, trimSpace: true });
-        if (suburbNameMatch !== null) {
-            suburbName = SuburbNames[suburbNameMatch];
-            tokens.splice(-index, index);  // remove elements from the end of the array           
-            break;
-        }
-    }
-
-    if (suburbName === null)  // suburb name not found (or not recognised)
-        return { text: address, hasSuburb: false, hasStreet: false };
-
-    // Expand an abbreviated street suffix.  For example, expand "RD" to "Road".
-
-    let streetSuffixAbbreviation = tokens.pop() || "";
-    let streetSuffix = StreetSuffixes[streetSuffixAbbreviation.toLowerCase()] || streetSuffixAbbreviation;
-
-    // Allow minor spelling corrections in the remaining tokens to construct a street name.
-
-    let streetName = (tokens.join(" ") + " " + streetSuffix).trim();
-    let streetNameMatch = didyoumean(streetName, Object.keys(StreetNames), { caseSensitive: false, returnType: "first-closest-match", thresholdType: "edit-distance", threshold: 2, trimSpace: true });
-    if (streetNameMatch !== null)
-        streetName = streetNameMatch;
-
-    return { text: (streetName + ((streetName === "") ? "" : ", ") + suburbName).trim(), hasSuburb: true, hasStreet: (streetName.length > 0) };
-}
-
 // Gets the text downwards in a rectangle, where the rectangle is delineated by the positions in
 // which the three specified strings of (case sensitive) text are found.
 
@@ -431,40 +377,176 @@ for (let element of addressElements)
     return addressElements;
 }
 
-// Parses the details from the elements associated with a single development application.
+// Finds the element containing the assessment number text.
 
-function parseApplicationElements(elements: Element[], startElement: Element, informationUrl: string) {
-    console.log("----------Elements for one Application----------");
-    // for (let element of elements)
-    //     console.log(`    [${element.text}] (${element.x},${element.y}) ${element.width}×${element.height} confidence=${Math.round((element as any).confidence)}%`);
-    //     // console.log(`    [${element.text}] (${Math.round(element.x)},${Math.round(element.y)}) ${element.width}×${element.height} confidence=${Math.round((element as any).confidence)}%`);
-
-console.log("Refactor assessment number logic to a separate function.");
-
+function getAssessmentNumberElement(elements: Element[], startElement: Element) {
     // Find the "Assessment Number" or "Asses Num" text (allowing for spelling errors).
 
     let assessmentNumberElement = elements.find(element =>
         element.y > startElement.y &&
         didyoumean(element.text, [ "Assessment Number", "Asses Num" ], { caseSensitive: false, returnType: "first-closest-match", thresholdType: "edit-distance", threshold: 2, trimSpace: true }) !== null);
 
-    if (assessmentNumberElement === undefined) {
-        // Find any occurrences of the text "Assessment" or "Asses".
+    if (assessmentNumberElement !== undefined)
+        return assessmentNumberElement;
 
-        let assessmentElements = elements.filter(
-            element => element.y > startElement.y &&
-            didyoumean(element.text, [ "Assessment", "Asses" ], { caseSensitive: false, returnType: "first-closest-match", thresholdType: "edit-distance", threshold: 2, trimSpace: true }) !== null);
+    // Find any occurrences of the text "Assessment" or "Asses".
 
-        // Check if any of those occurrences of "Assessment" are followed by "Number" or "Num".
+    let assessmentElements = elements.filter(
+        element => element.y > startElement.y &&
+        didyoumean(element.text, [ "Assessment", "Asses" ], { caseSensitive: false, returnType: "first-closest-match", thresholdType: "edit-distance", threshold: 2, trimSpace: true }) !== null);
 
-        for (let assessmentElement of assessmentElements) {
-            let assessmentRightElement = getRightElement(elements, assessmentElement);
-            if (assessmentRightElement !== null && didyoumean(assessmentRightElement.text, [ "Number", "Num" ], { caseSensitive: false, returnType: "first-closest-match", thresholdType: "edit-distance", threshold: 2, trimSpace: true }) !== null) {
-                assessmentNumberElement = assessmentElement;
-                break;
-            }
+    // Check if any of those occurrences of "Assessment" are followed by "Number" or "Num".
+
+    for (let assessmentElement of assessmentElements) {
+        let assessmentRightElement = getRightElement(elements, assessmentElement);
+        if (assessmentRightElement !== null && didyoumean(assessmentRightElement.text, [ "Number", "Num" ], { caseSensitive: false, returnType: "first-closest-match", thresholdType: "edit-distance", threshold: 2, trimSpace: true }) !== null)
+            return assessmentElement;
+    }
+
+    return undefined;
+}
+
+// Gets the element containining the received date.
+
+function getReceivedDateElement(elements: Element[], startElement: Element, middleElement: Element) {
+    // Search to the right of "Dev App No." for the lodged date (including up and down a few
+    // "lines" from the "Dev App No." text because sometimes the lodged date is offset vertically
+    // by a fair amount; in some cases offset up and in other cases offset down).
+
+    let dateElements = elements.filter(element => element.x >= middleElement.x &&
+        element.y + element.height > startElement.y - startElement.height &&
+        element.y < startElement.y + 2 * startElement.height &&
+        moment(element.text.trim(), "D/MM/YYYY", true).isValid());
+
+    // Select the left most date (ie. favour the "lodged" date over the "final descision" date).
+
+    let receivedDateElement = dateElements.reduce((previous, current) => ((previous === undefined || previous.x > current.x) ? current : previous), undefined);
+    return receivedDateElement;
+}
+
+// Gets the description.
+
+function getDescription(elements: Element[], startElement: Element, middleElement: Element, receivedDateElement: Element) {
+    // Set the element which delineates the top of the description text.
+
+    let descriptionTopElement = (receivedDateElement === undefined) ? startElement : receivedDateElement;
+
+    // Set the element which delineates the bottom left of the description text.
+    
+    let descriptionBottomLeftElement = middleElement;
+    
+    // Extract the description text.
+    
+    let descriptionElements = elements.filter(element => element.y > descriptionTopElement.y + descriptionTopElement.height &&
+        element.y < descriptionBottomLeftElement.y &&
+        element.x > descriptionBottomLeftElement.x - 0.2 * descriptionBottomLeftElement.width);
+    
+    // Sort the description elements by Y co-ordinate and then by X co-ordinate (the Math.max
+    // expressions exist to allow for the Y co-ordinates of elements to be not exactly aligned;
+    // for example, hyphens in text such as "Retail Fitout - Shop 7").
+    
+    let elementComparer = (a, b) => (a.y > b.y + (Math.max(a.height, b.height) * 2) / 3) ? 1 : ((a.y < b.y - (Math.max(a.height, b.height) * 2) / 3) ? -1 : ((a.x > b.x) ? 1 : ((a.x < b.x) ? -1 : 0)));
+    descriptionElements.sort(elementComparer);
+
+    // Construct the description from the description elements.
+
+    let description = descriptionElements.map(element => element.text).join(" ").trim().replace(/\s\s+/g, " ").replace(/ﬁ/g, "fi").replace(/ﬂ/g, "fl");
+    return description;
+}
+
+// Formats (and corrects) an address.
+
+function formatAddress(address: string) {
+    address = address.trim();
+    if (address === "")
+        return { text: "", hasSuburb: false, hasStreet: false };
+
+    let tokens = address.split(" ");
+
+    // It is common for an invalid postcode of "0" to appear on the end of an address.  Remove
+    // this if it is present.  For example, "Bremer Range RD CALLINGTON 0".  Remove the post code
+    // because this will be derived based on the suburb.
+
+    let postCode = tokens[tokens.length - 1];
+    if (/^[0-9]{4}$/.test(postCode) || postCode === "O" || postCode === "0" || postCode === "D")
+        tokens.pop();
+
+    // Remove the state abbreviation (this will be determined using the suburb).
+
+    let state = tokens[tokens.length - 1];
+    if (didyoumean(state, [ "SA" ], { caseSensitive: true, returnType: "first-closest-match", thresholdType: "edit-distance", threshold: 1, trimSpace: true }) !== null)
+        tokens.pop();
+    
+    // Pop tokens from the end of the array until a valid suburb name is encountered (allowing
+    // for a few spelling errors).
+
+    let suburbName = null;
+    for (let index = 1; index <= 4; index++) {
+        let suburbNameMatch = didyoumean(tokens.slice(-index).join(" "), Object.keys(SuburbNames), { caseSensitive: false, returnType: "first-closest-match", thresholdType: "edit-distance", threshold: 2, trimSpace: true });
+        if (suburbNameMatch !== null) {
+            suburbName = SuburbNames[suburbNameMatch];
+            tokens.splice(-index, index);  // remove elements from the end of the array           
+            break;
         }
     }
 
+    if (suburbName === null)  // suburb name not found (or not recognised)
+        return { text: address, hasSuburb: false, hasStreet: false };
+
+    // Expand an abbreviated street suffix.  For example, expand "RD" to "Road".
+
+    let streetSuffixAbbreviation = tokens.pop() || "";
+    let streetSuffix = StreetSuffixes[streetSuffixAbbreviation.toLowerCase()] || streetSuffixAbbreviation;
+
+    // Allow minor spelling corrections in the remaining tokens to construct a street name.
+
+    let streetName = (tokens.join(" ") + " " + streetSuffix).trim();
+    let streetNameMatch = didyoumean(streetName, Object.keys(StreetNames), { caseSensitive: false, returnType: "first-closest-match", thresholdType: "edit-distance", threshold: 2, trimSpace: true });
+    if (streetNameMatch !== null)
+        streetName = streetNameMatch;
+
+    return { text: (streetName + ((streetName === "") ? "" : ", ") + suburbName).trim(), hasSuburb: true, hasStreet: (streetName.length > 0) };
+}
+
+// Gets and formats the address.
+
+function getAddress(elements: Element[], assessmentNumberElement: Element, middleElement: Element) {
+    let addressElements = getAboveElements(elements, assessmentNumberElement, middleElement);
+    if (addressElements.length === 0)
+        return undefined;
+    
+    // Construct the address from the discovered address elements (and attempt to correct some
+    // spelling errors).
+
+    let address = addressElements.map(element => element.text).join(" ").trim().replace(/\s\s+/g, " ").replace(/ﬁ/g, "fi").replace(/ﬂ/g, "fl").replace(/\\\//g, "V");
+    if (address.startsWith("Dev Cost") || address.startsWith("LOT:") || address.startsWith("LOT ") || address.startsWith("HD:") || address.startsWith("HD "))  // finding this text instead of an address indicates that there is no address present
+        return undefined;
+
+    // If the address starts with a suburb then there may be a street name on the line above.
+
+    let formattedAddress = formatAddress(address);
+
+    if (!formattedAddress.hasStreet) {
+        let streetElements = getAboveElements(elements, addressElements[0], middleElement);
+        if (streetElements.length > 0) {
+            let street = streetElements.map(element => element.text).join(" ").trim().replace(/\s\s+/g, " ").replace(/ﬁ/g, "fi").replace(/ﬂ/g, "fl").replace(/\\\//g, "V");
+            if (!street.startsWith("Dev Cost") && !street.startsWith("LOT:") && !street.startsWith("LOT ") && !street.startsWith("HD:") && !street.startsWith("HD "))  // finding this text instead of an address indicates that there is no address present
+                formattedAddress = formatAddress(street + " " + formattedAddress.text);
+        }
+    }
+
+    if (formattedAddress.text === "")
+        return undefined;
+
+    return formattedAddress.text;
+}
+
+// Parses the details from the elements associated with a single development application.
+
+function parseApplicationElements(elements: Element[], startElement: Element, informationUrl: string) {
+    // Find the "Assessment Number" or "Asses Num" text.
+
+    let assessmentNumberElement = getAssessmentNumberElement(elements, startElement);
     if (assessmentNumberElement === undefined) {
         console.log("Could not find the \"Assessment Number\" or \"Asses Num\" text on the PDF page for the current development application.  The development application will be ignored.");
         return undefined;
@@ -473,14 +555,10 @@ console.log("Refactor assessment number logic to a separate function.");
     // Find the "Applicant" text.
 
     let applicantElement = elements.find(element => element.y > startElement.y && element.text.trim().toLowerCase() === "applicant");
-if (applicantElement === undefined)
-    console.log("    Could not find applicantElement.");
 
     // Find the "Builder" text.
 
     let builderElement = elements.find(element => element.y > startElement.y && element.text.trim().toLowerCase() === "builder");
-if (builderElement === undefined)
-    console.log("    Could not find builderElement.");
 
     // One of either the applicant or builder elements is required in order to determine where
     // the description text starts on the X axis (and where the development application number
@@ -492,6 +570,8 @@ if (builderElement === undefined)
         return undefined;
     }
 
+    // Get the application number.
+
     let applicationNumber = getRightRowText(elements, startElement, middleElement).trim().replace(/\s/g, "");
     applicationNumber = applicationNumber.replace(/[IlL\[\]\|’,!]/g, "/");  // for example, converts "17I2017" to "17/2017"
 
@@ -500,105 +580,29 @@ if (builderElement === undefined)
         return undefined;
     }
 
-    console.log(`Application Number: ${applicationNumber}`);
-
-console.log("Refactor received date logic to a separate function.");
-
-    // Search to the right of "Dev App No." for the lodged date (including up and down a few
-    // "lines" from the "Dev App No." text because sometimes the lodged date is offset vertically
-    // by a fair amount; in some cases offset up and in other cases offset down).
-
-    let dateElements = elements.filter(element =>
-        element.x >= middleElement.x &&
-        element.y + element.height > startElement.y - startElement.height &&
-        element.y < startElement.y + 2 * startElement.height &&
-        moment(element.text.trim(), "D/MM/YYYY", true).isValid());
-
-    // Select the left most date (ie. favour the "lodged" date over the "final descision" date).
+    // Get the received date.
 
     let receivedDate: moment.Moment = undefined;
-    let receivedDateElement = dateElements.reduce((previous, current) => ((previous === undefined || previous.x > current.x) ? current : previous), undefined);
+    let receivedDateElement = getReceivedDateElement(elements, startElement, middleElement);
     if (receivedDateElement !== undefined)
         receivedDate = moment(receivedDateElement.text.trim(), "D/MM/YYYY", true);
-    
-    if (receivedDate !== undefined)
-        console.log(`Received Date: ${receivedDate.isValid() ? receivedDate.format("YYYY-MM-DD") : ""}`)
 
-console.log("Refactor description logic to a separate function.");
+    // Get the description.
 
-    // Set the element which delineates the top of the description text.
-
-    let descriptionTopElement = (receivedDateElement === undefined) ? startElement : receivedDateElement;
-
-    // Set the element which delineates the bottom left of the description text.
-
-    let descriptionBottomLeftElement = middleElement;
-
-    // Extract the description text.
-
-    let descriptionElements = elements.filter(element =>
-        element.y > descriptionTopElement.y + descriptionTopElement.height &&
-        element.y < descriptionBottomLeftElement.y &&
-        element.x > descriptionBottomLeftElement.x - 0.2 * descriptionBottomLeftElement.width);
-
-    // Sort the description elements by Y co-ordinate and then by X co-ordinate (the Math.max
-    // expressions exist to allow for the Y co-ordinates of elements to be not exactly aligned;
-    // for example, hyphens in text such as "Retail Fitout - Shop 7").
-
-    let elementComparer = (a, b) => (a.y > b.y + (Math.max(a.height, b.height) * 2) / 3) ? 1 : ((a.y < b.y - (Math.max(a.height, b.height) * 2) / 3) ? -1 : ((a.x > b.x) ? 1 : ((a.x < b.x) ? -1 : 0)));
-    descriptionElements.sort(elementComparer);
-
-    // Construct the description from the description elements.
-
-    let description = descriptionElements.map(element => element.text).join(" ").trim().replace(/\s\s+/g, " ").replace(/ﬁ/g, "fi").replace(/ﬂ/g, "fl");
+    let description = getDescription(elements, startElement, middleElement, receivedDateElement);
     console.log(`Description: ${description}`);
 
-console.log("Refactor address logic to a separate function.");
+    // Get the address.
 
-    let addressElements = getAboveElements(elements, assessmentNumberElement, middleElement);
-    if (addressElements.length === 0) {
-        console.log(`Application number ${applicationNumber} will be ignored because an address was not found (searching upwards from the "Assessment Number" or \"Asses Num\" text).`);
+    let address = getAddress(elements, assessmentNumberElement, middleElement);
+    if (address === undefined) {
+        console.log(`Application number ${applicationNumber} will be ignored because an address was not found or parsed (searching upwards from the "Assessment Number" or \"Asses Num\" text).`);
         return undefined;
     }
-    
-    // Construct the address from the discovered address elements (and attempt to correct some
-    // spelling errors).
-
-    let address = addressElements.map(element => element.text).join(" ").trim().replace(/\s\s+/g, " ").replace(/ﬁ/g, "fi").replace(/ﬂ/g, "fl").replace(/\\\//g, "V");
-    if (address.startsWith("Dev Cost") || address.startsWith("LOT:") || address.startsWith("LOT ") || address.startsWith("HD:") || address.startsWith("HD ")) {  // finding this text instead of an address indicates that there is no address present
-        console.log(`Application number ${applicationNumber} will be ignored because no address was specified.`);
-        return undefined;
-    }
-
-    // If the address starts with a suburb then there may be a street name on the line above.
-
-    let formattedAddress = formatAddress(address);
-    console.log(`Address Before: ${formattedAddress.text} (hasSuburb: ${formattedAddress.hasSuburb}, hasStreet: ${formattedAddress.hasStreet})`);
-
-    if (!formattedAddress.hasStreet) {
-        let streetElements = getAboveElements(elements, addressElements[0], middleElement);
-        if (streetElements.length > 0) {
-            let street = streetElements.map(element => element.text).join(" ").trim().replace(/\s\s+/g, " ").replace(/ﬁ/g, "fi").replace(/ﬂ/g, "fl").replace(/\\\//g, "V");
-            if (!street.startsWith("Dev Cost") && !street.startsWith("LOT:") && !street.startsWith("LOT ") && !street.startsWith("HD:") && !street.startsWith("HD ")) {  // finding this text instead of an address indicates that there is no address present
-                console.log(`Street: ${street}`);
-                formattedAddress = formatAddress(street + " " + formattedAddress.text);
-                console.log(`Address After: ${formattedAddress.text} (hasSuburb: ${formattedAddress.hasSuburb}, hasStreet: ${formattedAddress.hasStreet})`);
-            }
-        }
-    }
-
-    if (formattedAddress.text === "") {
-        console.log(`Application number ${applicationNumber} will be ignored because because an address could not be parsed from the text \"${address}\".`);
-        return undefined;
-    }
-
-    // for (let element of elements)
-    //     console.log(`[${Math.round(element.x)},${Math.round(element.y)}] ${element.text}`);
-    console.log("----------");
 
     return {
         applicationNumber: applicationNumber,
-        address: formattedAddress.text,
+        address: address,
         description: ((description === "") ? "No description provided" : description),
         informationUrl: informationUrl,
         commentUrl: CommentUrl,
@@ -1133,7 +1137,7 @@ let selectedPdfUrls = [
     // "http://www.murraybridge.sa.gov.au/webdata/resources/files/Development%20Decisions%20April%202018-1.pdf",
     // "http://www.murraybridge.sa.gov.au/webdata/resources/files/Crystal%20Report%20-%20DevApp%20February%202018.pdf",
     // "http://www.murraybridge.sa.gov.au/webdata/resources/files/Crystal%20Report%20-%20DevApp%20January%202018.pdf",
-    // "http://www.murraybridge.sa.gov.au/webdata/resources/files/December%202017.pdf", 
+    "http://www.murraybridge.sa.gov.au/webdata/resources/files/December%202017.pdf", 
     // "http://www.murraybridge.sa.gov.au/webdata/resources/files/Crystal%20Report%20-%20DevApp%20November%202017.pdf",
     // "http://www.murraybridge.sa.gov.au/webdata/resources/files/Crystal%20Report%20-%20DevApp%20October%202017.pdf", 
     // "http://www.murraybridge.sa.gov.au/webdata/resources/files/Crystal%20Report%20-%20DevApp%20September%202017.pdf", 
