@@ -144,6 +144,16 @@ function isVerticalOverlap(element1: Element, element2: Element) {
     return element2.y < element1.y + element1.height && element2.y + element2.height > element1.y;
 }
 
+// Gets the element immediately to the right of the specified element.
+
+function getRightElement(elements: Element[], element: Element) {
+    let closestElement: Element = { text: undefined, confidence: 0, x: Number.MAX_VALUE, y: Number.MAX_VALUE, width: 0, height: 0 };
+    for (let rightElement of elements)
+        if (isVerticalOverlap(element, rightElement) && (rightElement.x > element.x + element.width) && calculateDistance(element, rightElement) < calculateDistance(element, closestElement))
+            closestElement = rightElement;
+    return (closestElement.text === undefined) ? undefined : closestElement;
+}
+
 // Gets the percentage of vertical overlap between two elements (0 means no overlap and 100 means
 // 100% overlap; and, for example, 20 means that 20% of the second element overlaps somewhere
 // with the first element).
@@ -152,16 +162,6 @@ function getVerticalOverlapPercentage(element1: Element, element2: Element) {
     let y1 = Math.max(element1.y, element2.y);
     let y2 = Math.min(element1.y + element1.height, element2.y + element2.height);
     return (y2 < y1) ? 0 : (((y2 - y1) * 100) / element2.height);
-}
-
-// Gets the element immediately to the right of the specified element.
-
-function getRightElement(elements: Element[], element: Element) {
-    let closestElement: Element = { text: undefined, confidence: 0, x: Number.MAX_VALUE, y: Number.MAX_VALUE, width: 0, height: 0 };
-    for (let rightElement of elements)
-        if (isVerticalOverlap(element, rightElement) && calculateDistance(element, rightElement) < calculateDistance(element, closestElement))
-            closestElement = rightElement;
-    return (closestElement.text === undefined) ? undefined : closestElement;
 }
 
 // Gets the text to the right of the specified startElement up to the left hand side of the
@@ -774,7 +774,7 @@ let buffer = fs.readFileSync(`C:\\Temp\\Murray Bridge\\Test Set\\${fileName}`);
     let pdf = await pdfjs.getDocument({ data: buffer, disableFontFace: true, ignoreErrors: true });
 
     for (let pageIndex = 0; pageIndex < pdf.numPages; pageIndex++) {
-        console.log(`Reading and parsing page ${pageIndex + 1} of ${pdf.numPages}.`);
+        console.log(`Reading and parsing applications from page ${pageIndex + 1} of ${pdf.numPages}.`);
         let page = await pdf.getPage(pageIndex + 1);
         let viewportTest = await page.getViewport(1.0);
         let operators = await page.getOperatorList();
@@ -904,10 +904,8 @@ if (hasAlreadyParsed) {
         // The first page typically has a record count which can be used to determine if all
         // applications are successfully parsed later.
 
-        if (pageIndex === 0) {  // first page
+        if (pageIndex === 0)  // first page
             recordCount = getRecordCount(elements, startElements[0]);
-            console.log(`Expected record count is ${recordCount}.`);
-        }
 
         // Parse the development application from each group of elements (ie. a section of the
         // current page of the PDF document).
@@ -921,16 +919,18 @@ if (hasAlreadyParsed) {
 
     // Check whether the expected number of development applications have been encountered.
 
-    let recordCountDiscrepancy = recordCount - developmentApplications.length;
-    if (recordCountDiscrepancy <= -2)
-        console.log(`Warning: ${recordCountDiscrepancy} extra records were extracted from the PDF (record count at top of PDF: ${recordCount}; extracted application count: ${developmentApplications.length}).`);
-    else if (recordCountDiscrepancy == -1)
-        console.log(`Warning: 1 extra record was extracted from the PDF (record count at top of PDF: ${recordCount}; extracted application count: ${developmentApplications.length}).`);
-    else if (recordCountDiscrepancy == 1)
-        console.log(`Warning: 1 record was not extracted from the PDF (record count at top of PDF: ${recordCount}; extracted application count: ${developmentApplications.length}).`);
-    else if (recordCountDiscrepancy >= 2)
-        console.log(`Warning: ${recordCountDiscrepancy} records were not extracted from the PDF (record count at top of PDF: ${recordCount}; extracted application count: ${developmentApplications.length}).`);
-    
+    if (recordCount !== -1) {
+        let recordCountDiscrepancy = recordCount - developmentApplications.length;
+        if (recordCountDiscrepancy <= -2)
+            console.log(`Warning: ${recordCountDiscrepancy} extra records were extracted from the PDF (record count at start of PDF: ${recordCount}; extracted application count: ${developmentApplications.length}).`);
+        else if (recordCountDiscrepancy == -1)
+            console.log(`Warning: 1 extra record was extracted from the PDF (record count at start of PDF: ${recordCount}; extracted application count: ${developmentApplications.length}).`);
+        else if (recordCountDiscrepancy == 1)
+            console.log(`Warning: 1 record was not extracted from the PDF (record count at start of PDF: ${recordCount}; extracted application count: ${developmentApplications.length}).`);
+        else if (recordCountDiscrepancy >= 2)
+            console.log(`Warning: ${recordCountDiscrepancy} records were not extracted from the PDF (record count at start of PDF: ${recordCount}; extracted application count: ${developmentApplications.length}).`);
+    }
+
     return developmentApplications;
 }
 
@@ -1000,18 +1000,18 @@ if (false) {
 let selectedPdfUrls = [
     // "http://www.murraybridge.sa.gov.au/webdata/resources/files/Crystal%20Report%20-%20DevApp%20July%202018.pdf",
     // "http://www.murraybridge.sa.gov.au/webdata/resources/files/Crystal%20Report%20-%20DevApp%20June%202018.pdf",
-    // "http://www.murraybridge.sa.gov.au/webdata/resources/files/Crystal%20Report%20-%20DevApp%20May%202018.pdf",
+    "http://www.murraybridge.sa.gov.au/webdata/resources/files/Crystal%20Report%20-%20DevApp%20May%202018.pdf",
     // "http://www.murraybridge.sa.gov.au/webdata/resources/files/Development%20Decisions%20April%202018-1.pdf",
-    "http://www.murraybridge.sa.gov.au/webdata/resources/files/Crystal%20Report%20-%20DevApp%20February%202018.pdf",
+    // "http://www.murraybridge.sa.gov.au/webdata/resources/files/Crystal%20Report%20-%20DevApp%20February%202018.pdf",
     // "http://www.murraybridge.sa.gov.au/webdata/resources/files/Crystal%20Report%20-%20DevApp%20January%202018.pdf",
-    "http://www.murraybridge.sa.gov.au/webdata/resources/files/December%202017.pdf", 
+    // "http://www.murraybridge.sa.gov.au/webdata/resources/files/December%202017.pdf", 
     // "http://www.murraybridge.sa.gov.au/webdata/resources/files/Crystal%20Report%20-%20DevApp%20November%202017.pdf",
     // "http://www.murraybridge.sa.gov.au/webdata/resources/files/Crystal%20Report%20-%20DevApp%20October%202017.pdf", 
     // "http://www.murraybridge.sa.gov.au/webdata/resources/files/Crystal%20Report%20-%20DevApp%20September%202017.pdf", 
     // "http://www.murraybridge.sa.gov.au/webdata/resources/files/Crystal%20Report%20-%20DevApp%20August%202017.pdf",
     // "http://www.murraybridge.sa.gov.au/webdata/resources/files/Crystal%20Report%20-%20DevApp%20July%202017.pdf", 
     // "http://www.murraybridge.sa.gov.au/webdata/resources/files/Crystal%20Report%20-%20DevApp%20June%202017.pdf",
-    "http://www.murraybridge.sa.gov.au/webdata/resources/files/Crystal%20Report%20-%20DevApp%20May%202017.pdf",
+    // "http://www.murraybridge.sa.gov.au/webdata/resources/files/Crystal%20Report%20-%20DevApp%20May%202017.pdf",
     // "http://www.murraybridge.sa.gov.au/webdata/resources/files/Crystal%20Report%20-%20DevApp%20April%202017-1.pdf",
     // "http://www.murraybridge.sa.gov.au/webdata/resources/files/Crystal%20Report%20-%20DevApp%20April%202017.pdf", 
     // "http://www.murraybridge.sa.gov.au/webdata/resources/files/Crystal%20Report%20-%20DevApp%20February%202017.pdf", 
@@ -1026,7 +1026,7 @@ let selectedPdfUrls = [
     // "http://www.murraybridge.sa.gov.au/webdata/resources/files/Crystal%20Report%20-%20DevApp%20May%202016.pdf", 
     // "http://www.murraybridge.sa.gov.au/webdata/resources/files/Crystal%20Report%20-%20DevApp%20April%202016.pdf",
     // "http://www.murraybridge.sa.gov.au/webdata/resources/files/Crystal%20Report%20-%20DevApp%20March%202016.pdf", 
-    "http://www.murraybridge.sa.gov.au/webdata/resources/files/Crystal%20Report%20-%20DevApp%20February%202016.pdf",
+    // "http://www.murraybridge.sa.gov.au/webdata/resources/files/Crystal%20Report%20-%20DevApp%20February%202016.pdf",
     // "http://www.murraybridge.sa.gov.au/webdata/resources/files/Crystal%20Report%20-%20DevApp%20January%202016.pdf",
     // "http://www.murraybridge.sa.gov.au/webdata/resources/files/Crystal%20Report%20-%20DevApp%20November%202015.pdf",  // images not parsed 20-Sep-2018
     // "http://www.murraybridge.sa.gov.au/webdata/resources/files/Crystal%20Report%20-%20DevApp%20October%202015.pdf",  // rotated 270 degrees
