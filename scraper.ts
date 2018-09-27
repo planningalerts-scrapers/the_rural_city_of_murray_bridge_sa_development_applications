@@ -122,16 +122,6 @@ function constructIntersection(rectangle1: Rectangle, rectangle2: Rectangle): Re
         return { x: 0, y: 0, width: 0, height: 0 };
 }
 
-// Constructs a rectangle based on the union of the two specified rectangles.
-
-function constructUnion(rectangle1: Rectangle, rectangle2: Rectangle): Rectangle {
-    let x1 = Math.min(rectangle1.x, rectangle2.x);
-    let x2 = Math.max(rectangle1.x + rectangle1.width, rectangle2.x + rectangle2.width);
-    let y1 = Math.min(rectangle1.y, rectangle2.y);
-    let y2 = Math.max(rectangle1.y + rectangle1.height, rectangle2.y + rectangle2.height);
-    return { x: x1, y: y1, width: x2 - x1, height: y2 - y1 };
-}
-
 // Calculates the area of a rectangle.
 
 function getArea(rectangle: Rectangle) {
@@ -193,47 +183,6 @@ function getRightRowText(elements: Element[], startElement: Element, middleEleme
     return rowElements.map(element => element.text).join(" ").trim().replace(/\s\s+/g, " ");
 }
 
-// Gets the text to the right in a rectangle, where the rectangle is delineated by the positions in
-// which the three specified strings of (case sensitive) text are found.
-
-function getRightText(elements: Element[], topLeftText: string, rightText: string, bottomText: string) {
-    // Construct a bounding rectangle in which the expected text should appear.  Any elements
-    // over 50% within the bounding rectangle will be assumed to be part of the expected text.
-
-    let topLeftElement = elements.find(element => element.text.trim() == topLeftText);
-    let rightElement = (rightText === undefined) ? undefined : elements.find(element => element.text.trim() == rightText);
-    let bottomElement = (bottomText === undefined) ? undefined: elements.find(element => element.text.trim() == bottomText);
-    if (topLeftElement === undefined)
-        return undefined;
-
-    let x = topLeftElement.x + topLeftElement.width;
-    let y = topLeftElement.y;
-    let width = (rightElement === undefined) ? Number.MAX_VALUE : (rightElement.x - x);
-    let height = (bottomElement === undefined) ? Number.MAX_VALUE : (bottomElement.y - y);
-
-    let bounds: Rectangle = { x: x, y: y, width: width, height: height };
-
-    // Gather together all elements that are at least 50% within the bounding rectangle.
-
-    let intersectingElements: Element[] = []
-    for (let element of elements) {
-        let intersectingBounds = constructIntersection(element, bounds);
-        let intersectingArea = intersectingBounds.width * intersectingBounds.height;
-        let elementArea = element.width * element.height;
-        if (elementArea > 0 && intersectingArea * 2 > elementArea && element.text !== ":")
-            intersectingElements.push(element);
-    }
-
-    // Sort the elements by Y co-ordinate and then by X co-ordinate.
-
-    let elementComparer = (a, b) => (a.y > b.y) ? 1 : ((a.y < b.y) ? -1 : ((a.x > b.x) ? 1 : ((a.x < b.x) ? -1 : 0)));
-    intersectingElements.sort(elementComparer);
-
-    // Join the elements into a single string.
-
-    return intersectingElements.map(element => element.text).join(" ").trim().replace(/\s\s+/g, " ");
-}
-
 // Reads all the address information into global objects.
 
 function readAddressInformation() {
@@ -262,47 +211,6 @@ function readAddressInformation() {
     }
 }
 
-// Gets the text downwards in a rectangle, where the rectangle is delineated by the positions in
-// which the three specified strings of (case sensitive) text are found.
-
-function getDownText(elements: Element[], topText: string, rightText: string, bottomText: string) {
-    // Construct a bounding rectangle in which the expected text should appear.  Any elements
-    // over 50% within the bounding rectangle will be assumed to be part of the expected text.
-
-    let topElement = elements.find(element => element.text.trim() == topText);
-    let rightElement = (rightText === undefined) ? undefined : elements.find(element => element.text.trim() == rightText);
-    let bottomElement = (bottomText === undefined) ? undefined: elements.find(element => element.text.trim() == bottomText);
-    if (topElement === undefined)
-        return undefined;
-
-    let x = topElement.x;
-    let y = topElement.y + topElement.height;
-    let width = (rightElement === undefined) ? Number.MAX_VALUE : (rightElement.x - x);
-    let height = (bottomElement === undefined) ? Number.MAX_VALUE : (bottomElement.y - y);
-
-    let bounds: Rectangle = { x: x, y: y, width: width, height: height };
-
-    // Gather together all elements that are at least 50% within the bounding rectangle.
-
-    let intersectingElements: Element[] = []
-    for (let element of elements) {
-        let intersectingBounds = constructIntersection(element, bounds);
-        let intersectingArea = intersectingBounds.width * intersectingBounds.height;
-        let elementArea = element.width * element.height;
-        if (elementArea > 0 && intersectingArea * 2 > elementArea && element.text !== ":")
-            intersectingElements.push(element);
-    }
-
-    // Sort the elements by Y co-ordinate and then by X co-ordinate.
-
-    let elementComparer = (a, b) => (a.y > b.y) ? 1 : ((a.y < b.y) ? -1 : ((a.x > b.x) ? 1 : ((a.x < b.x) ? -1 : 0)));
-    intersectingElements.sort(elementComparer);
-
-    // Join the elements into a single string.
-
-    return intersectingElements.map(element => element.text).join(" ").trim().replace(/\s\s+/g, " ");
-}
-
 // Gets the elements on the line above (typically an address line).
 
 function getAboveElements(elements: Element[], belowElement: Element, middleElement: Element) {
@@ -324,11 +232,7 @@ function getAboveElements(elements: Element[], belowElement: Element, middleElem
     if (addressBottomElement === undefined)
         return [];
 
-console.log(`addressBottomElement is (${addressBottomElement.x},${addressBottomElement.y}) width=${addressBottomElement.width} height=${addressBottomElement.height}`);
-
     // Obtain all elements on the same "line" as the lowest address element.
-
-console.log(`middleElement is (x=${middleElement.x},y=${middleElement.y}) width=${middleElement.width} height=${middleElement.height}`);
 
     addressElements = elements.filter(element =>
         element.y < belowElement.y - belowElement.height &&
@@ -344,10 +248,6 @@ console.log(`middleElement is (x=${middleElement.x},y=${middleElement.y}) width=
     // Remove any smaller elements (say less than half the area) that are 90% or more encompassed
     // by another element (this then avoids some artefacts of the text recognition, ie. elements
     // such as "r~" and "-" that can otherwise overlap the main text).
-
-console.log("-----Address elements before:");
-for (let element of addressElements)
-    console.log(`    [${element.text}] (${element.x},${element.y}) ${element.width}×${element.height} confidence=${Math.round((element as any).confidence)}%`);
 
     addressElements = addressElements.filter(element =>
         !addressElements.some(otherElement =>
@@ -369,10 +269,6 @@ for (let element of addressElements)
             }
         }
     }
-    
-console.log("-----Address elements after:");
-for (let element of addressElements)
-    console.log(`    [${element.text}] (${element.x},${element.y}) ${element.width}×${element.height} confidence=${Math.round((element as any).confidence)}%`);
 
     return addressElements;
 }
@@ -395,7 +291,7 @@ function getAssessmentNumberElement(elements: Element[], startElement: Element) 
         element => element.y > startElement.y &&
         didyoumean(element.text, [ "Assessment", "Asses" ], { caseSensitive: false, returnType: "first-closest-match", thresholdType: "edit-distance", threshold: 2, trimSpace: true }) !== null);
 
-    // Check if any of those occurrences of "Assessment" are followed by "Number" or "Num".
+    // Check if any of the occurrences of "Assessment" are followed by "Number" or "Num".
 
     for (let assessmentElement of assessmentElements) {
         let assessmentRightElement = getRightElement(elements, assessmentElement);
@@ -450,8 +346,7 @@ function getDescription(elements: Element[], startElement: Element, middleElemen
 
     // Construct the description from the description elements.
 
-    let description = descriptionElements.map(element => element.text).join(" ").trim().replace(/\s\s+/g, " ").replace(/ﬁ/g, "fi").replace(/ﬂ/g, "fl");
-    return description;
+    return descriptionElements.map(element => element.text).join(" ").trim().replace(/\s\s+/g, " ").replace(/ﬁ/g, "fi").replace(/ﬂ/g, "fl");
 }
 
 // Formats (and corrects) an address.
@@ -590,7 +485,6 @@ function parseApplicationElements(elements: Element[], startElement: Element, in
     // Get the description.
 
     let description = getDescription(elements, startElement, middleElement, receivedDateElement);
-    console.log(`Description: ${description}`);
 
     // Get the address.
 
@@ -608,7 +502,7 @@ function parseApplicationElements(elements: Element[], startElement: Element, in
         commentUrl: CommentUrl,
         scrapeDate: moment().format("YYYY-MM-DD"),
         receivedDate: (receivedDate !== undefined && receivedDate.isValid()) ? receivedDate.format("YYYY-MM-DD") : ""
-    }
+    };
 }
 
 // Segments an image vertically and horizontally based on blocks of white (or almost white) pixels
@@ -616,16 +510,9 @@ function parseApplicationElements(elements: Element[], startElement: Element, in
 // A very simple horizontal and then vertical search is performed for consecutive lines of white
 // (or mostly white) pixels.
 
-let imageCount = 0;
-let imageSegmentedCount = 0;
-
 function segmentImage(jimpImage: any) {
     let segments: { image: jimp, bounds: Rectangle }[] = [];
     let bounds = { x: 0, y: 0, width: jimpImage.bitmap.width, height: jimpImage.bitmap.height };
-
-// imageCount++;
-// console.log(`Writing image ${imageCount}`);
-// jimpImage.write(`C:\\Temp\\Murray Bridge\\Reconstructed\\Reconstructed.Images.${imageCount}.png`);
 
     // Only segment large images (do not waste time on small images which are already small enough
     // that they will not cause too much memory to be used).
@@ -638,12 +525,7 @@ function segmentImage(jimpImage: any) {
     
         for (let rectangle of rectangles) {
             let croppedJimpImage: jimp = new (jimp as any)(rectangle.width, rectangle.height);
-            croppedJimpImage.blit(jimpImage, 0, 0, rectangle.x, rectangle.y, rectangle.width, rectangle.height);
-
-// imageSegmentedCount++;
-// console.log(`    Writing segmented image ${imageSegmentedCount} to file.`);
-// croppedJimpImage.write(`C:\\Temp\\Murray Bridge\\Test Set\\Large Image.${imageConvertCount}.Segment${imageSegmentedCount}.${rectangle.width}×${rectangle.height}.png`);
-            
+            croppedJimpImage.blit(jimpImage, 0, 0, rectangle.x, rectangle.y, rectangle.width, rectangle.height);            
             segments.push({ image: croppedJimpImage, bounds: rectangle });
         }
     }
@@ -792,8 +674,6 @@ function getRecordCount(elements: Element[], startElement: Element) {
 
 // Converts image data from the PDF to a Jimp format image.
 
-let imageConvertCount = 0;
-
 function convertToJimpImage(image: any) {
     let pixelSize = (8 * image.data.length) / (image.width * image.height);
     let jimpImage = null;
@@ -829,10 +709,6 @@ function convertToJimpImage(image: any) {
         }
     }
 
-// imageConvertCount++;
-// console.log(`Writing image ${imageConvertCount} to file.`);
-// jimpImage.write(`C:\\Temp\\Murray Bridge\\Test Set\\Large Image.${imageConvertCount}.${image.width}×${image.height}.png`);
-
     return jimpImage;
 }
 
@@ -848,8 +724,8 @@ async function parseImage(image: any, bounds: Rectangle) {
 
     let elements: Element[] = [];
     for (let segment of segments) {
-        // Note that textord_old_baselines is set to 0 so that text that is offset by half the height
-        // of the the font is correctly recognised.
+        // Note that textord_old_baselines is set to 0 so that text that is offset by half the
+        // height of the the font is correctly recognised.
 
         let imageBuffer = await new Promise((resolve, reject) => segment.image.getBuffer(jimp.MIME_PNG, (error, buffer) => error ? reject(error) : resolve(buffer)));
         let result: any = await new Promise((resolve, reject) => { tesseract.recognize(imageBuffer, { textord_old_baselines: "0" }).then(function(result) { resolve(result); }) });
@@ -884,6 +760,7 @@ async function parseImage(image: any, bounds: Rectangle) {
 
 async function parsePdf(url: string) {
     let developmentApplications = [];
+    let recordCount = 0;
 
     // Read the PDF.
 
@@ -892,18 +769,13 @@ let fileName = decodeURI(new urlparser.URL(url).pathname.split("/").pop());
 console.log(`Reading "${fileName}" from local disk.`);
 let buffer = fs.readFileSync(`C:\\Temp\\Murray Bridge\\Test Set\\${fileName}`);
 
-    // let buffer = await request({ url: url, encoding: null, proxy: process.env.MORPH_PROXY });
-    // await sleep(2000 + getRandom(0, 5) * 1000);
-
     // Parse the PDF.  Each page has the details of multiple applications.
 
     let pdf = await pdfjs.getDocument({ data: buffer, disableFontFace: true, ignoreErrors: true });
 
-console.log("Get \"Records\" from first page and ensure that total is correct.");
-
-    for (let index = 0; index < pdf.numPages; index++) {
-        console.log(`Page ${index + 1} of ${pdf.numPages}.`);
-        let page = await pdf.getPage(index + 1);
+    for (let pageIndex = 0; pageIndex < pdf.numPages; pageIndex++) {
+        console.log(`Reading and parsing page ${pageIndex + 1} of ${pdf.numPages}.`);
+        let page = await pdf.getPage(pageIndex + 1);
         let viewportTest = await page.getViewport(1.0);
         let operators = await page.getOperatorList();
 
@@ -912,12 +784,12 @@ console.log("Get \"Records\" from first page and ensure that total is correct.")
         let elements: Element[] = [];
 
 if (hasAlreadyParsed) {
-    console.log("Reading pre-parsed elements.");
-    console.log(`Reading pre-parsed elements for page ${index + 1} of ${fileName}.`);
-    elements = JSON.parse(fs.readFileSync(`C:\\Temp\\Murray Bridge\\Test Set\\${fileName}.Page${index + 1}.txt`, "utf8"));
+    // console.log("Reading pre-parsed elements.");
+    // console.log(`Reading pre-parsed elements for page ${pageIndex + 1} of ${fileName}.`);
+    elements = JSON.parse(fs.readFileSync(`C:\\Temp\\Murray Bridge\\Test Set\\${fileName}.Page${pageIndex + 1}.txt`, "utf8"));
 } else {
     console.log("Parsing using slow approach.");
-    console.log(`Rotation for page ${index + 1}: ${page.rotate}`);
+    console.log(`Rotation for page ${pageIndex + 1}: ${page.rotate}`);
         if (page.rotate !== 0) {
             console.log(`Ignoring the page because it is rotated ${page.rotate}°.`);
             continue;
@@ -954,8 +826,6 @@ if (hasAlreadyParsed) {
                 height: image.height
             };
 
-// console.log(`    Image: ${image.width}×${image.height}`);
-
             // Parse the text from the image.
 
             elements = elements.concat(await parseImage(image, bounds));
@@ -963,26 +833,6 @@ if (hasAlreadyParsed) {
                 global.gc();
         }
 
-// Reconstruct the image.
-//
-// let maximumWidth = Math.ceil(elements.reduce((maximum, element) => Math.max(maximum, element.x + element.width), 0));
-// let maximumHeight = Math.ceil(elements.reduce((maximum, element) => Math.max(maximum, element.y + element.height), 0));
-// console.log(`maximumWidth: ${maximumWidth}, maximumHeight: ${maximumHeight}, elements.length: ${elements.length}`);
-//
-// let reconstructedImage: any = await new Promise((resolve, reject) => new (jimp as any)(maximumWidth, maximumHeight, (error, image) => error ? reject(error) : resolve(image)));
-// let font = await (jimp as any).loadFont(jimp.FONT_SANS_16_BLACK);
-//
-// for (let element of elements) {
-//     let wordImage = new (jimp as any)(Math.round(element.width), Math.round(element.height), 0x776677ff);
-//     reconstructedImage.blit(wordImage, element.x, element.y, 0, 0, element.width, element.height);
-//     reconstructedImage.print(font, element.x, element.y, element.text);
-// }
-//
-// console.log(`Writing reconstructed image for page ${index + 1} of ${fileName}.`);
-// reconstructedImage.write(`C:\\Temp\\Murray Bridge\\Reconstructed\\Reconstructed.${fileName}.Page${index + 1}.png`);
-
-//    console.log(`Saving the elements for page ${index + 1} of ${fileName}.`);
-//    fs.writeFileSync(`C:\\Temp\\Murray Bridge\\Test Set\\${fileName}.Page${index + 1}.txt`, JSON.stringify(elements));
     continue;
 }
 
@@ -1054,8 +904,8 @@ if (hasAlreadyParsed) {
         // The first page typically has a record count which can be used to determine if all
         // applications are successfully parsed later.
 
-        if (index === 0) {  // first page
-            let recordCount = getRecordCount(elements, startElements[0]);
+        if (pageIndex === 0) {  // first page
+            recordCount = getRecordCount(elements, startElements[0]);
             console.log(`Expected record count is ${recordCount}.`);
         }
 
@@ -1068,6 +918,18 @@ if (hasAlreadyParsed) {
                 developmentApplications.push(developmentApplication);
         }
     }
+
+    // Check whether the expected number of development applications have been encountered.
+
+    let recordCountDiscrepancy = recordCount - developmentApplications.length;
+    if (recordCountDiscrepancy <= -2)
+        console.log(`Warning: ${recordCountDiscrepancy} extra records were extracted from the PDF (record count at top of PDF: ${recordCount}; extracted application count: ${developmentApplications.length}).`);
+    else if (recordCountDiscrepancy == -1)
+        console.log(`Warning: 1 extra record was extracted from the PDF (record count at top of PDF: ${recordCount}; extracted application count: ${developmentApplications.length}).`);
+    else if (recordCountDiscrepancy == 1)
+        console.log(`Warning: 1 record was not extracted from the PDF (record count at top of PDF: ${recordCount}; extracted application count: ${developmentApplications.length}).`);
+    else if (recordCountDiscrepancy >= 2)
+        console.log(`Warning: ${recordCountDiscrepancy} records were not extracted from the PDF (record count at top of PDF: ${recordCount}; extracted application count: ${developmentApplications.length}).`);
     
     return developmentApplications;
 }
@@ -1080,7 +942,7 @@ function getRandom(minimum: number, maximum: number) {
 
 // Pauses for the specified number of milliseconds.
 
-function sleep(milliseconds) {
+function sleep(milliseconds: number) {
     return new Promise(resolve => setTimeout(resolve, milliseconds));
 }
 
