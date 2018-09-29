@@ -147,16 +147,6 @@ function isVerticalOverlap(element1: Element, element2: Element) {
     return element2.y < element1.y + element1.height && element2.y + element2.height > element1.y;
 }
 
-// Gets the element immediately to the right of the specified element.
-
-function getRightElement(elements: Element[], element: Element) {
-    let closestElement: Element = { text: undefined, confidence: 0, x: Number.MAX_VALUE, y: Number.MAX_VALUE, width: 0, height: 0 };
-    for (let rightElement of elements)
-        if (isVerticalOverlap(element, rightElement) && (rightElement.x > element.x + element.width) && calculateDistance(element, rightElement) < calculateDistance(element, closestElement))
-            closestElement = rightElement;
-    return (closestElement.text === undefined) ? undefined : closestElement;
-}
-
 // Gets the percentage of vertical overlap between two elements (0 means no overlap and 100 means
 // 100% overlap; and, for example, 20 means that 20% of the second element overlaps somewhere
 // with the first element).
@@ -167,10 +157,25 @@ function getVerticalOverlapPercentage(element1: Element, element2: Element) {
     return (y2 < y1) ? 0 : (((y2 - y1) * 100) / element2.height);
 }
 
+// Gets the element immediately to the right of the specified element (but ignore elements that
+// appear after a large horizontal gap).
+
+function getRightElement(elements: Element[], element: Element) {
+    let closestElement: Element = { text: undefined, confidence: 0, x: Number.MAX_VALUE, y: Number.MAX_VALUE, width: 0, height: 0 };
+    for (let rightElement of elements)
+        if (isVerticalOverlap(element, rightElement) &&  // ensure that there is at least some vertical overlap
+            getVerticalOverlapPercentage(element, rightElement) > 50 &&  // avoid extremely tall elements (ensure at least 50% overlap)
+            (rightElement.x > element.x + element.width) &&  // ensure the element actually is to the right
+            (rightElement.x - (element.x + element.width) < 30) &&  // avoid elements that appear after a large gap (arbitrarily ensure less than a 30 pixel gap horizontally)
+            calculateDistance(element, rightElement) < calculateDistance(element, closestElement))  // check if closer than any element encountered so far
+            closestElement = rightElement;
+    return (closestElement.text === undefined) ? undefined : closestElement;
+}
+
 // Gets the text to the right of the specified startElement up to the left hand side of the
 // specified middleElement (adjusted left by 20% of the width of the middleElement as a safety
 // precaution).  Only elements that overlap 50% or more in the vertical direction with the
-// specified startElement are considered (ie. elements on the same "row").
+// specified startElement are considered (ie. elements on the same "row" and not too tall).
 
 function getRightRowText(elements: Element[], startElement: Element, middleElement: Element) {
     let rowElements = elements.filter(element =>
@@ -283,7 +288,7 @@ function getAssessmentNumberElement(elements: Element[], startElement: Element) 
 
     let assessmentNumberElement = elements.find(element =>
         element.y > startElement.y &&
-        didyoumean(element.text, [ "Assessment Number", "Asses Num" ], { caseSensitive: false, returnType: "first-closest-match", thresholdType: "edit-distance", threshold: 2, trimSpace: true }) !== null);
+        didyoumean(element.text, [ "Assessment Number", "Asses Num" ], { caseSensitive: false, returnType: "first-closest-match", thresholdType: "edit-distance", threshold: 3, trimSpace: true }) !== null);
 
     if (assessmentNumberElement !== undefined)
         return assessmentNumberElement;
@@ -685,6 +690,63 @@ function getRecordCount(elements: Element[], startElement: Element) {
     return -1;
 }
 
+// Finds the start element of each development application on the current PDF page (there are
+// typically three development applications on a single page and each development application
+// typically begins with the text "Dev App No.").
+
+function findStartElements(elements: Element[]) {
+    // Examine all the elements on the page that being with "d".
+    
+    let startElements: Element[] = [];
+    for (let element of elements.filter(element => element.text.trim().toLowerCase().startsWith("d"))) {
+        // Extract up to 10 elements to the right of the element that has text starting with the
+        // letter "d" (and so may be the start of the "Dev App No" or "Dev App No." text).  Join
+        // together the elements to the right in an attempt to find the best match to the text
+        // "Dev App No" or "Dev App No.".
+
+        let rightElement = element;
+        let rightElements: Element[] = [];
+        let matches = [];
+
+        do {
+            rightElements.push(rightElement);
+        
+            // Allow for common misspellings of the "no." text.
+
+            let text = rightElements.map(element => element.text).join("").replace(/\s/g, "").replace(/n0/g, "no").replace(/n°/g, "no").replace(/"o/g, "no").replace(/"0/g, "no").replace(/"°/g, "no").toLowerCase();
+            if (text.length >= 11)  // stop once the text is too long
+                break;
+            if (text.length >= 7) {  // ignore until the text is close to long enough
+                if (text === "devappno" || text === "devappno.") {
+                    matches.push({ element: rightElement, threshold: 0 });
+                } else if (didyoumean(text, [ "DevAppNo", "DevAppNo." ], { caseSensitive: false, returnType: "first-closest-match", thresholdType: "edit-distance", threshold: 1, trimSpace: true }) !== null) {
+                    matches.push({ element: rightElement, threshold: 1 });
+                } else if (didyoumean(text, [ "DevAppNo", "DevAppNo." ], { caseSensitive: false, returnType: "first-closest-match", thresholdType: "edit-distance", threshold: 2, trimSpace: true }) !== null) {
+                    matches.push({ element: rightElement, threshold: 2 });
+                }
+            }
+
+            rightElement = getRightElement(elements, rightElement);
+        } while (rightElement !== undefined && rightElements.length < 10);
+
+        // Chose the best match (if any matches were found).
+
+        if (matches.length > 0) {
+            let bestMatch = matches.reduce((previous, current) =>
+                (previous === undefined ||
+                previous.threshold < current.threshold ||
+                (previous.threshold === current.threshold && Math.abs(previous.text.length - "DevAppNo.".length) <= Math.abs(current.text.length - "DevAppNo.".length)) ? current : previous), undefined);
+            startElements.push(bestMatch.element);
+        }
+    }
+
+    // Ensure the start elements are sorted in the order that they appear on the page.
+
+    let yComparer = (a, b) => (a.y > b.y) ? 1 : ((a.y < b.y) ? -1 : 0);
+    startElements.sort(yComparer);
+    return startElements;
+}
+
 // Converts image data from the PDF to a Jimp format image.
 
 function convertToJimpImage(image: any) {
@@ -858,43 +920,11 @@ if (hasAlreadyParsed) {
 
         // Group the elements into sections based on where the "Dev App No." text starts (and
         // any other element the "Dev Ap No." elements line up with horizontally with a margin
-        // of error equal to about the height of the "Dev App No." text; in order to capture the
-        // lodged date, which may be higher up than the "Dev App No." text).
-
-        let startElements: Element[] = [];
-        for (let startElement of elements.filter(element => element.text.trim().toLowerCase().startsWith("dev"))) {
-            // Check that the elements next to "Dev" produce the text "Dev App No.".  Take care
-            // as the text may possibly be spread across one, two or three elements (allow for
-            // all these possibilities).
-
-            let startText = condenseText(startElement);
-            if (startText === "dev") {
-                startElement = getRightElement(elements, startElement);
-                startText = condenseText(startElement);
-                if (startText === "app") {
-                    startElement = getRightElement(elements, startElement);
-                    startText = condenseText(startElement);
-                    if (startText !== "no" && startText !== "n0" && startText !== "n°" && startText !== "\"o" && startText !== "\"0" && startText !== "\"°")
-                        continue;  // not "Dev App No."
-                } else if (startText !== "appno") {
-                    continue;  // not "Dev App No."
-                }
-            } else if (startText === "devapp") {
-                startElement = getRightElement(elements, startElement);
-                startText = condenseText(startElement);
-                if (startText !== "no")
-                    continue; // not "Dev App No."
-            } else if (startText !== "devappno") {
-                continue;  // not "Dev App No."
-            }
-
-            startElements.push(startElement);
-        }
-
-        let yComparer = (a, b) => (a.y > b.y) ? 1 : ((a.y < b.y) ? -1 : 0);
-        startElements.sort(yComparer);
+        // of error equal to about the height of the "Dev App No." text; this is done in order
+        // to capture the lodged date, which may be higher up than the "Dev App No." text).
 
         let applicationElementGroups = [];
+        let startElements = findStartElements(elements);
         for (let index = 0; index < startElements.length; index++) {
             // Determine the highest Y co-ordinate of this row and the next row (or the bottom of
             // the current page).  Allow some leeway vertically (add some extra height) because
@@ -1046,8 +1076,8 @@ let selectedPdfUrls = [
     // "http://www.murraybridge.sa.gov.au/webdata/resources/files/Crystal%20Report%20-%20DevApp%20November%202015.pdf",  // images not parsed 20-Sep-2018
     //// "http://www.murraybridge.sa.gov.au/webdata/resources/files/Crystal%20Report%20-%20DevApp%20October%202015.pdf",  // rotated 270 degrees
     // "http://www.murraybridge.sa.gov.au/webdata/resources/files/Crystal%20Report%20-%20DevAppSeptember%202015.pdf",  // images not parsed 20-Sep-2018
-    "http://www.murraybridge.sa.gov.au/webdata/resources/files/Crystal%20Report%20-%20DevApp%20August%202015.pdf",  // images not parsed 20-Sep-2018
-    // "http://www.murraybridge.sa.gov.au/webdata/resources/files/Crystal%20Report%20-%20DevApp%20July%202015.pdf",  // images not parsed 20-Sep-2018
+    // "http://www.murraybridge.sa.gov.au/webdata/resources/files/Crystal%20Report%20-%20DevApp%20August%202015.pdf",  // images not parsed 20-Sep-2018
+    "http://www.murraybridge.sa.gov.au/webdata/resources/files/Crystal%20Report%20-%20DevApp%20July%202015.pdf",  // images not parsed 20-Sep-2018
     //// "http://www.murraybridge.sa.gov.au/webdata/resources/files/Crystam%20Report%20-%20DevApproval%20June%202015.pdf",  // rotated 270 degrees
     //// "http://www.murraybridge.sa.gov.au/webdata/resources/files/Crystal%20Report%20-%20DevApp%20May%202015.pdf",  // text
     //// "http://www.murraybridge.sa.gov.au/webdata/resources/files/Crystal%20Report%20-%20DevApp%20April%202015.pdf",  // text
