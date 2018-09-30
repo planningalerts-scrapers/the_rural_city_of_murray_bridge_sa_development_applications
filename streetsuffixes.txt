@@ -1,5 +1,8 @@
 Av,Avenue
+Ave,Avenue
+Blvd,Boulevard
 Bvd,Boulevard
+Cct,Circuit
 Cir,Circuit
 Cl,Close
 Cr,Crescent
