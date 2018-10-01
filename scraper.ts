@@ -806,6 +806,8 @@ async function parseImage(image: any, bounds: Rectangle) {
         memoryUsage = process.memoryUsage();
         console.log(`    [3] Memory Usage: rss: ${Math.round(memoryUsage.rss / (1024 * 1024))} MB, heapTotal: ${Math.round(memoryUsage.heapTotal / (1024 * 1024))} MB, heapUsed: ${Math.round(memoryUsage.heapUsed / (1024 * 1024))} MB, external: ${Math.round(memoryUsage.external / (1024 * 1024))} MB`);
         console.log(`    Bounds: [${Math.round(segment.bounds.x)},${Math.round(segment.bounds.y)}] ${Math.round(segment.bounds.width)}×${Math.round(segment.bounds.height)}`);
+        if (segment.bounds.x * segment.bounds.y > 600 * 600)
+            console.log(`    Parsing a large image with bounds { x: ${Math.round(segment.bounds.x)}, y: ${Math.round(segment.bounds.y)}, width: ${Math.round(segment.bounds.width)}, height: ${Math.round(segment.bounds.height)} }.`);
 
         let result: any = await new Promise((resolve, reject) => { tesseract.recognize(imageBuffer, { textord_old_baselines: "0" }).then(function(result) { resolve(result); }) });
 
@@ -1038,8 +1040,6 @@ async function main() {
         selectedPdfUrls.push(pdfUrls[getRandom(1, pdfUrls.length)]);
     if (getRandom(0, 2) === 0)
         selectedPdfUrls.reverse();
-
-selectedPdfUrls = [ "http://www.murraybridge.sa.gov.au/webdata/resources/files/Crystal%20Report%20-%20DevApp%20April%202017.pdf" ];
 
     for (let pdfUrl of selectedPdfUrls) {
         console.log(`Parsing document: ${pdfUrl}`);
