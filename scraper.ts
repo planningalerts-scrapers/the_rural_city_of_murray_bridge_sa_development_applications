@@ -522,28 +522,29 @@ function parseApplicationElements(elements: Element[], startElement: Element, in
 // (or mostly white) pixels.
 
 function segmentImage(jimpImage: any) {
-    let segments: { image: jimp, bounds: Rectangle }[] = [];
     let bounds = { x: 0, y: 0, width: jimpImage.bitmap.width, height: jimpImage.bitmap.height };
 
     // Only segment large images (do not waste time on small images which are already small enough
     // that they will not cause too much memory to be used).
 
-    if (jimpImage.bitmap.width * jimpImage.bitmap.height > 250 * 250) {
-        let rectangles: Rectangle[] = [];
-        let verticalRectangles = segmentImageVertically(jimpImage, bounds);
-        for (let verticalRectangle of verticalRectangles)
-            rectangles = rectangles.concat(segmentImageHorizontally(jimpImage, verticalRectangle));
-    
-        for (let rectangle of rectangles) {
-            let croppedJimpImage: jimp = new (jimp as any)(rectangle.width, rectangle.height);
-            croppedJimpImage.blit(jimpImage, 0, 0, rectangle.x, rectangle.y, rectangle.width, rectangle.height);            
-            segments.push({ image: croppedJimpImage, bounds: rectangle });
-        }
-    }
-    
-    if (segments.length === 0)
-        segments.push({ image: jimpImage, bounds: bounds});
+    if (jimpImage.bitmap.width * jimpImage.bitmap.height < 400 * 400)
+        return [{ image: jimpImage, bounds: bounds }];
 
+    // Segment image based on white space.
+
+    let rectangles: Rectangle[] = [];
+    let verticalRectangles = segmentImageVertically(jimpImage, bounds);
+    for (let verticalRectangle of verticalRectangles)
+        rectangles = rectangles.concat(segmentImageHorizontally(jimpImage, verticalRectangle));
+
+    // Extract images delineated by the white space.
+
+    let segments: { image: jimp, bounds: Rectangle }[] = [];
+    for (let rectangle of rectangles) {
+        let croppedJimpImage: jimp = new (jimp as any)(rectangle.width, rectangle.height);
+        croppedJimpImage.blit(jimpImage, 0, 0, rectangle.x, rectangle.y, rectangle.width, rectangle.height);            
+        segments.push({ image: croppedJimpImage, bounds: rectangle });
+    }
     return segments;
 }
 
