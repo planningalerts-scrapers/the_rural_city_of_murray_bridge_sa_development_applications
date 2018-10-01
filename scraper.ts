@@ -710,13 +710,12 @@ function findStartElements(elements: Element[]) {
             if (text.length >= 11)  // stop once the text is too long
                 break;
             if (text.length >= 7) {  // ignore until the text is close to long enough
-                if (text === "devappno" || text === "devappno.") {
+                if (text === "devappno" || text === "devappno.")
                     matches.push({ element: rightElement, threshold: 0 });
-                } else if (didyoumean(text, [ "DevAppNo", "DevAppNo." ], { caseSensitive: false, returnType: "first-closest-match", thresholdType: "edit-distance", threshold: 1, trimSpace: true }) !== null) {
+                else if (didyoumean(text, [ "DevAppNo", "DevAppNo." ], { caseSensitive: false, returnType: "first-closest-match", thresholdType: "edit-distance", threshold: 1, trimSpace: true }) !== null)
                     matches.push({ element: rightElement, threshold: 1 });
-                } else if (didyoumean(text, [ "DevAppNo", "DevAppNo." ], { caseSensitive: false, returnType: "first-closest-match", thresholdType: "edit-distance", threshold: 2, trimSpace: true }) !== null) {
+                else if (didyoumean(text, [ "DevAppNo", "DevAppNo." ], { caseSensitive: false, returnType: "first-closest-match", thresholdType: "edit-distance", threshold: 2, trimSpace: true }) !== null)
                     matches.push({ element: rightElement, threshold: 2 });
-                }
             }
 
             rightElement = getRightElement(elements, rightElement);
