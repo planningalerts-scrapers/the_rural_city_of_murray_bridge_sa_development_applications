@@ -800,7 +800,7 @@ async function parseImage(image: any, bounds: Rectangle) {
         let memoryUsage = process.memoryUsage();
         if (memoryUsage.rss > 200)  // 200 MB
             console.log(`Memory Usage: rss: ${Math.round(memoryUsage.rss / (1024 * 1024))} MB, heapTotal: ${Math.round(memoryUsage.heapTotal / (1024 * 1024))} MB, heapUsed: ${Math.round(memoryUsage.heapUsed / (1024 * 1024))} MB, external: ${Math.round(memoryUsage.external / (1024 * 1024))} MB`);
-        if (segment.bounds.x * segment.bounds.y > 600 * 600)
+        if (segment.bounds.width * segment.bounds.height > 600 * 600)
             console.log(`Parsing a large image with bounds { x: ${Math.round(segment.bounds.x)}, y: ${Math.round(segment.bounds.y)}, width: ${Math.round(segment.bounds.width)}, height: ${Math.round(segment.bounds.height)} }.`);
     
         let result: any = await new Promise((resolve, reject) => { tesseract.recognize(imageBuffer, { textord_old_baselines: "0" }).then(function(result) { resolve(result); }) });
