@@ -528,7 +528,7 @@ function segmentImage(jimpImage: any) {
     // Only segment large images (do not waste time on small images which are already small enough
     // that they will not cause too much memory to be used).
 
-    if (jimpImage.bitmap.width * jimpImage.bitmap.height > 500 * 500) {
+    if (jimpImage.bitmap.width * jimpImage.bitmap.height > 400 * 400) {
         let rectangles: Rectangle[] = [];
         let verticalRectangles = segmentImageVertically(jimpImage, bounds);
         for (let verticalRectangle of verticalRectangles)
