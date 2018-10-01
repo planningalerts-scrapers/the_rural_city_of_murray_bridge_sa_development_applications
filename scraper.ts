@@ -309,7 +309,7 @@ function getReceivedDateElement(elements: Element[], startElement: Element, midd
     // by a fair amount; in some cases offset up and in other cases offset down).
 
     let dateElements = elements.filter(element => element.x >= middleElement.x &&
-        element.y + element.height > startElement.y - startElement.height &&
+        element.y + element.height > startElement.y - 1.5 * startElement.height &&
         element.y < startElement.y + 2 * startElement.height &&
         moment(element.text.trim(), "D/MM/YYYY", true).isValid());
 
@@ -800,7 +800,7 @@ async function parseImage(image: any, bounds: Rectangle) {
         let memoryUsage = process.memoryUsage();
         if (memoryUsage.rss > 200 * 1024 * 1024)  // 200 MB
             console.log(`Memory Usage: rss: ${Math.round(memoryUsage.rss / (1024 * 1024))} MB, heapTotal: ${Math.round(memoryUsage.heapTotal / (1024 * 1024))} MB, heapUsed: ${Math.round(memoryUsage.heapUsed / (1024 * 1024))} MB, external: ${Math.round(memoryUsage.external / (1024 * 1024))} MB`);
-        if (segment.bounds.width * segment.bounds.height > 600 * 600)
+        if (segment.bounds.width * segment.bounds.height > 700 * 700)
             console.log(`Parsing a large image with bounds { x: ${Math.round(segment.bounds.x)}, y: ${Math.round(segment.bounds.y)}, width: ${Math.round(segment.bounds.width)}, height: ${Math.round(segment.bounds.height)} }.`);
     
         let result: any = await new Promise((resolve, reject) => { tesseract.recognize(imageBuffer, { textord_old_baselines: "0" }).then(function(result) { resolve(result); }) });
