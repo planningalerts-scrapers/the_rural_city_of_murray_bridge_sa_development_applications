@@ -812,6 +812,7 @@ async function parseImage(image: any, bounds: Rectangle) {
         // height of the the font is correctly recognised.
 
         let imageBuffer = await new Promise((resolve, reject) => segment.image.getBuffer(jimp.MIME_PNG, (error, buffer) => error ? reject(error) : resolve(buffer)));
+        segment.image = undefined;  // attempt to release memory
 
         let memoryUsage = process.memoryUsage();
         // if (memoryUsage.rss > 200 * 1024 * 1024)  // 200 MB
