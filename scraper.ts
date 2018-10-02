@@ -521,21 +521,29 @@ function parseApplicationElements(elements: Element[], startElement: Element, in
 // A very simple horizontal and then vertical search is performed for consecutive lines of white
 // (or mostly white) pixels.
 
+let imageMainCount = 0;
+
 function segmentImage(jimpImage: any) {
     let bounds = { x: 0, y: 0, width: jimpImage.bitmap.width, height: jimpImage.bitmap.height };
 
+imageMainCount++;
+jimpImage.write(`C:\\Temp\\Murray Bridge\\Test Set (August 2016)\\MainImage.${imageMainCount}.${Math.round(jimpImage.bitmap.width)}×${Math.round(jimpImage.bitmap.height)}.png`);
+    
     // Only segment large images (do not waste time on small images which are already small enough
     // that they will not cause too much memory to be used).
 
     if (jimpImage.bitmap.width * jimpImage.bitmap.height < 400 * 400)
         return [{ image: jimpImage, bounds: bounds }];
-
+       
     // Segment image based on white space.
 
     let rectangles: Rectangle[] = [];
+    let horizontalRectangles: Rectangle[] = [];
     let verticalRectangles = segmentImageVertically(jimpImage, bounds);
     for (let verticalRectangle of verticalRectangles)
-        rectangles = rectangles.concat(segmentImageHorizontally(jimpImage, verticalRectangle));
+        horizontalRectangles = horizontalRectangles.concat(segmentImageHorizontally(jimpImage, verticalRectangle));
+    for (let horizontalRectangle of horizontalRectangles)
+        rectangles = rectangles.concat(segmentImageVertically(jimpImage, horizontalRectangle));
 
     // Extract images delineated by the white space.
 
@@ -592,7 +600,7 @@ function segmentImageVertically(jimpImage: any, bounds: Rectangle) {
 
     let rectangles = [];
     for (let index = 0; index <= whiteBlocks.length; index++) {
-        let y = (index === 0) ? 0 : (whiteBlocks[index - 1].y + whiteBlocks[index - 1].height);
+        let y = (index === 0) ? bounds.y : (whiteBlocks[index - 1].y + whiteBlocks[index - 1].height);
         let height = ((index === whiteBlocks.length) ? (bounds.y + bounds.height) : whiteBlocks[index].y) - y;
         if (height > 0)
             rectangles.push({ x: bounds.x, y: y, width: bounds.width, height: height });
@@ -645,7 +653,7 @@ function segmentImageHorizontally(jimpImage: any, bounds: Rectangle) {
 
     let rectangles = [];
     for (let index = 0; index <= whiteBlocks.length; index++) {
-        let x = (index === 0) ? 0 : (whiteBlocks[index - 1].x + whiteBlocks[index - 1].width);
+        let x = (index === 0) ? bounds.x : (whiteBlocks[index - 1].x + whiteBlocks[index - 1].width);
         let width = ((index === whiteBlocks.length) ? (bounds.x + bounds.width) : whiteBlocks[index].x) - x;
         if (width > 0)
             rectangles.push({ x: x, y: bounds.y, width: width, height: bounds.height });
@@ -792,6 +800,13 @@ async function parseImage(image: any, bounds: Rectangle) {
 
     let elements: Element[] = [];
     for (let segment of segments) {
+        let scaleFactor = 1.0;
+        if (segment.bounds.width * segment.bounds.height > 1000 * 1000) {
+            scaleFactor = 0.5;
+            console.log(`Scaling a large image (${segment.bounds.width}×${segment.bounds.height}) by ${scaleFactor} to reduce memory usage.`);
+            segment.image = segment.image.scale(scaleFactor, jimp.RESIZE_BEZIER);
+        }
+
         // Note that textord_old_baselines is set to 0 so that text that is offset by half the
         // height of the the font is correctly recognised.
 
@@ -819,10 +834,10 @@ async function parseImage(image: any, bounds: Rectangle) {
                                 text: word.text,
                                 confidence: word.confidence,
                                 choiceCount: word.choices.length,
-                                x: word.bbox.x0 + bounds.x + segment.bounds.x,
-                                y: word.bbox.y0 + bounds.y + segment.bounds.y,
-                                width: (word.bbox.x1 - word.bbox.x0),
-                                height: (word.bbox.y1 - word.bbox.y0)
+                                x: bounds.x + segment.bounds.x + word.bbox.x0 / scaleFactor,
+                                y: bounds.y + segment.bounds.y + word.bbox.y0 / scaleFactor,
+                                width: (word.bbox.x1 - word.bbox.x0) / scaleFactor,
+                                height: (word.bbox.y1 - word.bbox.y0) / scaleFactor
                             };
                         }));
     }
@@ -1020,6 +1035,9 @@ async function main() {
         selectedPdfUrls.push(pdfUrls[getRandom(1, pdfUrls.length)]);
     if (getRandom(0, 2) === 0)
         selectedPdfUrls.reverse();
+
+console.log(`Parsing only August 2016 PDF.`);
+selectedPdfUrls = [ "http://www.murraybridge.sa.gov.au/webdata/resources/files/Crystal%20Report%20-%20DevApp%20August%202016.pdf" ];
 
     for (let pdfUrl of selectedPdfUrls) {
         console.log(`Parsing document: ${pdfUrl}`);
