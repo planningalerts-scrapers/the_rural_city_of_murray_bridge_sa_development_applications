@@ -533,13 +533,12 @@ function segmentImage(jimpImage: any) {
     // Segment image based on white space.
 
     let rectangles: Rectangle[] = [];
-    // let horizontalRectangles: Rectangle[] = [];
+    let horizontalRectangles: Rectangle[] = [];
     let verticalRectangles = segmentImageVertically(jimpImage, bounds);
     for (let verticalRectangle of verticalRectangles)
-        rectangles = rectangles.concat(segmentImageHorizontally(jimpImage, verticalRectangle));
-    //    horizontalRectangles = horizontalRectangles.concat(segmentImageHorizontally(jimpImage, verticalRectangle));
-    // for (let horizontalRectangle of horizontalRectangles)
-    //     rectangles = rectangles.concat(segmentImageVertically(jimpImage, horizontalRectangle));
+        horizontalRectangles = horizontalRectangles.concat(segmentImageHorizontally(jimpImage, verticalRectangle));
+    for (let horizontalRectangle of horizontalRectangles)
+        rectangles = rectangles.concat(segmentImageVertically(jimpImage, horizontalRectangle));
 
     // Extract images delineated by the white space.
 
@@ -790,8 +789,6 @@ async function parseImage(image: any, bounds: Rectangle) {
     // Convert the image data into a format that can be used by jimp and then segment the image
     // based on blocks of white.
 
-console.log(`SEGMENTING IMAGE: ${bounds.width}×${bounds.height}`);
-
     let segments = segmentImage(convertToJimpImage(image));
     if (global.gc)
         global.gc();
@@ -805,11 +802,6 @@ console.log(`SEGMENTING IMAGE: ${bounds.width}×${bounds.height}`);
             segment.image = segment.image.scale(scaleFactor, jimp.RESIZE_BEZIER);
         }
 
-        if (segment.bounds.width > 3000) {
-            console.log(`Skipping image ${segment.bounds.width}×${segment.bounds.height} for testing purposes.`);
-            continue;
-        }
-
         // Note that textord_old_baselines is set to 0 so that text that is offset by half the
         // height of the the font is correctly recognised.
 
@@ -817,9 +809,9 @@ console.log(`SEGMENTING IMAGE: ${bounds.width}×${bounds.height}`);
         segment.image = undefined;  // attempt to release memory
 
         let memoryUsage = process.memoryUsage();
-        // if (memoryUsage.rss > 200 * 1024 * 1024)  // 200 MB
+        if (memoryUsage.rss > 200 * 1024 * 1024)  // 200 MB
             console.log(`Memory Usage: rss: ${Math.round(memoryUsage.rss / (1024 * 1024))} MB, heapTotal: ${Math.round(memoryUsage.heapTotal / (1024 * 1024))} MB, heapUsed: ${Math.round(memoryUsage.heapUsed / (1024 * 1024))} MB, external: ${Math.round(memoryUsage.external / (1024 * 1024))} MB`);
-        // if (segment.bounds.width * segment.bounds.height > 700 * 700)
+        if (segment.bounds.width * segment.bounds.height > 700 * 700)
             console.log(`Parsing a large image with bounds { x: ${Math.round(segment.bounds.x)}, y: ${Math.round(segment.bounds.y)}, width: ${Math.round(segment.bounds.width)}, height: ${Math.round(segment.bounds.height)} }.`);
     
         let result: any = await new Promise((resolve, reject) => { tesseract.recognize(imageBuffer, { textord_old_baselines: "0" }).then(function(result) { resolve(result); }) });
@@ -1039,9 +1031,6 @@ async function main() {
         selectedPdfUrls.push(pdfUrls[getRandom(1, pdfUrls.length)]);
     if (getRandom(0, 2) === 0)
         selectedPdfUrls.reverse();
-
-console.log(`Parsing only August 2016 PDF.`);
-selectedPdfUrls = [ "http://www.murraybridge.sa.gov.au/webdata/resources/files/Crystal%20Report%20-%20DevApp%20August%202016.pdf" ];
 
     for (let pdfUrl of selectedPdfUrls) {
         console.log(`Parsing document: ${pdfUrl}`);
