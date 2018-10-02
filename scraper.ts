@@ -538,12 +538,13 @@ jimpImage.write(`C:\\Temp\\Murray Bridge\\Test Set (August 2016)\\MainImage.${im
     // Segment image based on white space.
 
     let rectangles: Rectangle[] = [];
-    let horizontalRectangles: Rectangle[] = [];
+    // let horizontalRectangles: Rectangle[] = [];
     let verticalRectangles = segmentImageVertically(jimpImage, bounds);
     for (let verticalRectangle of verticalRectangles)
-        horizontalRectangles = horizontalRectangles.concat(segmentImageHorizontally(jimpImage, verticalRectangle));
-    for (let horizontalRectangle of horizontalRectangles)
-        rectangles = rectangles.concat(segmentImageVertically(jimpImage, horizontalRectangle));
+        rectangles = rectangles.concat(segmentImageHorizontally(jimpImage, verticalRectangle));
+    //    horizontalRectangles = horizontalRectangles.concat(segmentImageHorizontally(jimpImage, verticalRectangle));
+    // for (let horizontalRectangle of horizontalRectangles)
+    //     rectangles = rectangles.concat(segmentImageVertically(jimpImage, horizontalRectangle));
 
     // Extract images delineated by the white space.
 
