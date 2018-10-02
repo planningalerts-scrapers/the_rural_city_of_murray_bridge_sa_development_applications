@@ -521,14 +521,9 @@ function parseApplicationElements(elements: Element[], startElement: Element, in
 // A very simple horizontal and then vertical search is performed for consecutive lines of white
 // (or mostly white) pixels.
 
-let imageMainCount = 0;
-
 function segmentImage(jimpImage: any) {
     let bounds = { x: 0, y: 0, width: jimpImage.bitmap.width, height: jimpImage.bitmap.height };
 
-imageMainCount++;
-jimpImage.write(`C:\\Temp\\Murray Bridge\\Test Set (August 2016)\\MainImage.${imageMainCount}.${Math.round(jimpImage.bitmap.width)}×${Math.round(jimpImage.bitmap.height)}.png`);
-    
     // Only segment large images (do not waste time on small images which are already small enough
     // that they will not cause too much memory to be used).
 
