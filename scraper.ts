@@ -808,6 +808,11 @@ async function parseImage(image: any, bounds: Rectangle) {
             segment.image = segment.image.scale(scaleFactor, jimp.RESIZE_BEZIER);
         }
 
+        if (segment.bounds.width > 3000) {
+            console.log(`Skipping image ${segment.bounds.width}×${segment.bounds.height} for testing purposes.`);
+            continue;
+        }
+
         // Note that textord_old_baselines is set to 0 so that text that is offset by half the
         // height of the the font is correctly recognised.
 
