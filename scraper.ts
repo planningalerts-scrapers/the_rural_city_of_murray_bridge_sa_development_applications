@@ -795,6 +795,8 @@ async function parseImage(image: any, bounds: Rectangle) {
     // Convert the image data into a format that can be used by jimp and then segment the image
     // based on blocks of white.
 
+console.log(`SEGMENTING IMAGE: ${bounds.width}×${bounds.height}`);
+
     let segments = segmentImage(convertToJimpImage(image));
     if (global.gc)
         global.gc();
