@@ -629,8 +629,10 @@ async function parsePdf(url) {
     let buffer = await request({ url: url, encoding: null, proxy: process.env.MORPH_PROXY });
     await sleep(2000 + getRandom(0, 5) * 1000);
     // Parse the PDF.  Each page has the details of multiple applications.
-    let pdf = await pdfjs.getDocument({ data: buffer, disableFontFace: true, ignoreErrors: true });
-    for (let pageIndex = 0; pageIndex < pdf.numPages; pageIndex++) {
+    for (let pageIndex = 0; pageIndex < 100; pageIndex++) {
+        let pdf = await pdfjs.getDocument({ data: buffer, disableFontFace: true, ignoreErrors: true });
+        if (pageIndex >= pdf.numPages)
+            break;
         console.log(`Reading and parsing applications from page ${pageIndex + 1} of ${pdf.numPages}.`);
         let page = await pdf.getPage(pageIndex + 1);
         let viewportTest = await page.getViewport(1.0);
