@@ -796,11 +796,12 @@ async function parseImage(image: any, bounds: Rectangle) {
     let elements: Element[] = [];
     for (let segment of segments) {
         let scaleFactor = 1.0;
-        if (segment.bounds.width * segment.bounds.height > 1000 * 1000) {
-            scaleFactor = 0.5;
-            console.log(`Scaling a large image (${segment.bounds.width}×${segment.bounds.height}) by ${scaleFactor} to reduce memory usage.`);
-            segment.image = segment.image.scale(scaleFactor, jimp.RESIZE_BEZIER);
-        }
+console.log("Removed scale factor as a test.");
+        // if (segment.bounds.width * segment.bounds.height > 1000 * 1000) {
+        //     scaleFactor = 0.5;
+        //     console.log(`Scaling a large image (${segment.bounds.width}×${segment.bounds.height}) by ${scaleFactor} to reduce memory usage.`);
+        //     segment.image = segment.image.scale(scaleFactor, jimp.RESIZE_BEZIER);
+        // }
 
         // Note that textord_old_baselines is set to 0 so that text that is offset by half the
         // height of the the font is correctly recognised.
@@ -958,6 +959,11 @@ async function parsePdf(url: string) {
             if (developmentApplication !== undefined)
                 developmentApplications.push(developmentApplication);
         }
+
+        // Attempt to release memory used by the page.
+
+console.log("Releasing memory used by page.");
+        page._destroy();
     }
 
     // Check whether the expected number of development applications have been encountered.
@@ -1027,17 +1033,10 @@ async function main() {
 
 console.log("Attempt to parse all PDFs (as a memory usage test).");
 let selectedPdfUrls = [
-    // "http://www.murraybridge.sa.gov.au/webdata/resources/files/Crystal%20Report%20-%20DevApp%20July%202016.pdf", 
-    // "http://www.murraybridge.sa.gov.au/webdata/resources/files/Crystal%20Report%20-%20DevApp%20June%202016.pdf", 
-    // "http://www.murraybridge.sa.gov.au/webdata/resources/files/Crystal%20Report%20-%20DevApp%20May%202016.pdf", 
-    // "http://www.murraybridge.sa.gov.au/webdata/resources/files/Crystal%20Report%20-%20DevApp%20April%202016.pdf",
-    // "http://www.murraybridge.sa.gov.au/webdata/resources/files/Crystal%20Report%20-%20DevApp%20March%202016.pdf", 
-    // "http://www.murraybridge.sa.gov.au/webdata/resources/files/Crystal%20Report%20-%20DevApp%20February%202016.pdf",
-    // "http://www.murraybridge.sa.gov.au/webdata/resources/files/Crystal%20Report%20-%20DevApp%20January%202016.pdf",
-    // "http://www.murraybridge.sa.gov.au/webdata/resources/files/Crystal%20Report%20-%20DevApp%20November%202015.pdf",  // images not parsed 20-Sep-2018
-    "http://www.murraybridge.sa.gov.au/webdata/resources/files/Crystal%20Report%20-%20DevAppSeptember%202015.pdf",  // images not parsed 20-Sep-2018
-    "http://www.murraybridge.sa.gov.au/webdata/resources/files/Crystal%20Report%20-%20DevApp%20August%202015.pdf",  // images not parsed 20-Sep-2018
-    "http://www.murraybridge.sa.gov.au/webdata/resources/files/Crystal%20Report%20-%20DevApp%20July%202015.pdf",  // images not parsed 20-Sep-2018
+    "http://www.murraybridge.sa.gov.au/webdata/resources/files/Crystal%20Report%20-%20DevApp%20November%202015.pdf",
+    "http://www.murraybridge.sa.gov.au/webdata/resources/files/Crystal%20Report%20-%20DevApp%20October%202016.pdf",
+    "http://www.murraybridge.sa.gov.au/webdata/resources/files/Crystal%20Report%20-%20DevApp%20November%202016.pdf",
+    "http://www.murraybridge.sa.gov.au/webdata/resources/files/Crystal%20Report%20-%20DevApp%20August%202017.pdf"
 ];
 
     // let selectedPdfUrls: string[] = [];
