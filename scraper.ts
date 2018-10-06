@@ -796,12 +796,12 @@ async function parseImage(image: any, bounds: Rectangle) {
     let elements: Element[] = [];
     for (let segment of segments) {
         let scaleFactor = 1.0;
-console.log("Removed scale factor as a test.");
-        // if (segment.bounds.width * segment.bounds.height > 1000 * 1000) {
-        //     scaleFactor = 0.5;
-        //     console.log(`Scaling a large image (${segment.bounds.width}×${segment.bounds.height}) by ${scaleFactor} to reduce memory usage.`);
-        //     segment.image = segment.image.scale(scaleFactor, jimp.RESIZE_BEZIER);
-        // }
+console.log("Added back  scale factor as a test.");
+        if (segment.bounds.width * segment.bounds.height > 1000 * 1000) {
+            scaleFactor = 0.5;
+            console.log(`Scaling a large image (${segment.bounds.width}×${segment.bounds.height}) by ${scaleFactor} to reduce memory usage.`);
+            segment.image = segment.image.scale(scaleFactor, jimp.RESIZE_BEZIER);
+        }
 
         // Note that textord_old_baselines is set to 0 so that text that is offset by half the
         // height of the the font is correctly recognised.
