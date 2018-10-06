@@ -62,9 +62,9 @@ async function insertRow(database, developmentApplication) {
                 reject(error);
             } else {
                 if (this.changes > 0)
-                    console.log(`    Inserted: application \"${developmentApplication.applicationNumber}\" with address \"${developmentApplication.address}\" and description \"${developmentApplication.description}\" into the database.`);
+                    console.log(`    Inserted: application \"${developmentApplication.applicationNumber}\" with address \"${developmentApplication.address}\", description \"${developmentApplication.description}\" and received date \"${developmentApplication.receivedDate}\" into the database.`);
                 else
-                    console.log(`    Skipped: application \"${developmentApplication.applicationNumber}\" with address \"${developmentApplication.address}\" and description \"${developmentApplication.description}\" because it was already present in the database.`);
+                    console.log(`    Skipped: application \"${developmentApplication.applicationNumber}\" with address \"${developmentApplication.address}\", description \"${developmentApplication.description}\" and received date \"${developmentApplication.receivedDate}\" because it was already present in the database.`);
                 sqlStatement.finalize();  // releases any locks
                 resolve(row);
             }
@@ -105,7 +105,7 @@ function getRowTop(elements: Element[], startElement: Element) {
 
 // Constructs a rectangle based on the intersection of the two specified rectangles.
 
-function constructIntersection(rectangle1: Rectangle, rectangle2: Rectangle): Rectangle {
+function intersect(rectangle1: Rectangle, rectangle2: Rectangle): Rectangle {
     let x1 = Math.max(rectangle1.x, rectangle2.x);
     let y1 = Math.max(rectangle1.y, rectangle2.y);
     let x2 = Math.min(rectangle1.x + rectangle1.width, rectangle2.x + rectangle2.width);
@@ -114,6 +114,12 @@ function constructIntersection(rectangle1: Rectangle, rectangle2: Rectangle): Re
         return { x: x1, y: y1, width: x2 - x1, height: y2 - y1 };
     else
         return { x: 0, y: 0, width: 0, height: 0 };
+}
+
+// Inflates a rectangle by the specified amount.
+
+function inflate(rectangle: Rectangle, width: number, height: number) {
+    return { x: rectangle.x - width, y: rectangle.y - height, width: rectangle.width + 2 * width, height: rectangle.height + 2 * height };
 }
 
 // Calculates the area of a rectangle.
@@ -252,7 +258,7 @@ function getAboveElements(elements: Element[], belowElement: Element, middleElem
         !addressElements.some(otherElement =>
             getArea(otherElement) > 2 * getArea(element) &&  // smaller element (ie. the other element is at least double the area)
             getArea(element) > 0 &&
-            getArea(constructIntersection(element, otherElement)) / getArea(element) > 0.9
+            getArea(intersect(element, otherElement)) / getArea(element) > 0.9
         )
     );
 
@@ -309,8 +315,8 @@ function getReceivedDateElement(elements: Element[], startElement: Element, midd
     // by a fair amount; in some cases offset up and in other cases offset down).
 
     let dateElements = elements.filter(element => element.x >= middleElement.x &&
-        element.y + element.height > startElement.y - 1.5 * startElement.height &&
-        element.y < startElement.y + 2 * startElement.height &&
+        element.y + element.height > startElement.y - 2 * startElement.height &&
+        element.y < startElement.y + 3 * startElement.height &&
         moment(element.text.trim(), "D/MM/YYYY", true).isValid());
 
     // Select the left most date (ie. favour the "lodged" date over the "final descision" date).
@@ -473,7 +479,7 @@ function parseApplicationElements(elements: Element[], startElement: Element, in
     // Get the application number.
 
     let applicationNumber = getRightRowText(elements, startElement, middleElement).trim().replace(/\s/g, "");
-    applicationNumber = applicationNumber.replace(/[IlL\[\]\|’,!]/g, "/").replace(/°/g, "0");  // for example, converts "17I2017" to "17/2017"
+    applicationNumber = applicationNumber.replace(/[IlL\[\]\|’,!\(\)]/g, "/").replace(/°/g, "0").replace(/'\//g, "1").replace(/\/\//g, "1/").replace(/201\?/g, "2017");  // for example, converts "17I2017" to "17/2017"
     if (applicationNumber.length >= 6 && /120[0-9][0-9]$/.test(applicationNumber))
         applicationNumber = applicationNumber.substring(0, applicationNumber.length - 5) + "/" + applicationNumber.substring(applicationNumber.length - 4);  // for example, converts "35612015" to "356/2015"
 
@@ -545,6 +551,7 @@ function segmentImage(jimpImage: any) {
     let segments: { image: jimp, bounds: Rectangle }[] = [];
     for (let rectangle of rectangles) {
         let croppedJimpImage: jimp = new (jimp as any)(rectangle.width, rectangle.height);
+        rectangle = intersect(inflate(rectangle, 2, 2), bounds);  // inflate the rectangle slightly to include surrounding white space (because this may help when parsing the image)
         croppedJimpImage.blit(jimpImage, 0, 0, rectangle.x, rectangle.y, rectangle.width, rectangle.height);            
         segments.push({ image: croppedJimpImage, bounds: rectangle });
     }
@@ -795,14 +802,6 @@ async function parseImage(image: any, bounds: Rectangle) {
 
     let elements: Element[] = [];
     for (let segment of segments) {
-        let scaleFactor = 1.0;
-console.log("Added back  scale factor as a test.");
-        if (segment.bounds.width * segment.bounds.height > 1000 * 1000) {
-            scaleFactor = 0.5;
-            console.log(`Scaling a large image (${segment.bounds.width}×${segment.bounds.height}) by ${scaleFactor} to reduce memory usage.`);
-            segment.image = segment.image.scale(scaleFactor, jimp.RESIZE_BEZIER);
-        }
-
         // Note that textord_old_baselines is set to 0 so that text that is offset by half the
         // height of the the font is correctly recognised.
 
@@ -831,10 +830,10 @@ console.log("Added back  scale factor as a test.");
                                 text: word.text,
                                 confidence: word.confidence,
                                 choiceCount: word.choices.length,
-                                x: bounds.x + segment.bounds.x + word.bbox.x0 / scaleFactor,
-                                y: bounds.y + segment.bounds.y + word.bbox.y0 / scaleFactor,
-                                width: (word.bbox.x1 - word.bbox.x0) / scaleFactor,
-                                height: (word.bbox.y1 - word.bbox.y0) / scaleFactor
+                                x: bounds.x + segment.bounds.x + word.bbox.x0,
+                                y: bounds.y + segment.bounds.y + word.bbox.y0,
+                                width: word.bbox.x1 - word.bbox.x0,
+                                height: word.bbox.y1 - word.bbox.y0
                             };
                         }));
     }
@@ -853,11 +852,16 @@ async function parsePdf(url: string) {
     let buffer = await request({ url: url, encoding: null, proxy: process.env.MORPH_PROXY });
     await sleep(2000 + getRandom(0, 5) * 1000);
 
-    // Parse the PDF.  Each page has the details of multiple applications.
+    // Parse the PDF.  Each page has the details of multiple applications.  Note that the PDF is
+    // re-parsed on each iteration of the loop (ie. once for each page).  This then avoids large
+    // memory usage by the PDF (just calling page._destroy() on each iteration of the loop is not
+    // enough to release all memory used by the PDF parsing).
 
-    let pdf = await pdfjs.getDocument({ data: buffer, disableFontFace: true, ignoreErrors: true });
+    for (let pageIndex = 0; pageIndex < 1000; pageIndex++) {  // limit to an arbitrarily large number of pages (to avoid any chance of an infinite loop)
+        let pdf = await pdfjs.getDocument({ data: buffer, disableFontFace: true, ignoreErrors: true });
+        if (pageIndex >= pdf.numPages)
+            break;
 
-    for (let pageIndex = 0; pageIndex < pdf.numPages; pageIndex++) {
         console.log(`Reading and parsing applications from page ${pageIndex + 1} of ${pdf.numPages}.`);
         let page = await pdf.getPage(pageIndex + 1);
         let viewportTest = await page.getViewport(1.0);
@@ -883,8 +887,6 @@ async function parsePdf(url: string) {
             let image = operators.argsArray[index][0];
             if (typeof image === "string")
                 image = page.objs.get(image);  // get the actual image using its name
-            else
-                operators.argsArray[index][0] = undefined;  // attempt to release memory used by images
 
             // Obtain the transform that applies to the image.  Note that the first image in the
             // PDF typically has a pdfjs.OPS.dependency element in the fnArray between it and its
@@ -911,6 +913,13 @@ async function parsePdf(url: string) {
             if (global.gc)
                 global.gc();
         }
+
+        // Release the memory used by the PDF now that it is no longer required (it will be
+        // re-parsed on the next iteration of the loop for the next page).
+
+        await pdf.destroy();
+        if (global.gc)
+            global.gc();
 
         // Sort the elements by Y co-ordinate and then by X co-ordinate.
 
@@ -952,18 +961,22 @@ async function parsePdf(url: string) {
             recordCount = getRecordCount(elements, startElements[0]);
 
         // Parse the development application from each group of elements (ie. a section of the
-        // current page of the PDF document).
+        // current page of the PDF document).  If the same application number is encountered a
+        // second time in the same document then this likely indicates the parsing of the images
+        // has incorrectly recognised some of the digits in the application number.  In this case
+        // add a suffix to the application number so it is unique (and so will be inserted into
+        // the database later instead of being ignored).
 
         for (let applicationElementGroup of applicationElementGroups) {
             let developmentApplication = parseApplicationElements(applicationElementGroup.elements, applicationElementGroup.startElement, url);
-            if (developmentApplication !== undefined)
+            if (developmentApplication !== undefined) {
+                let suffix = 0;
+                let applicationNumber = developmentApplication.applicationNumber;
+                while (developmentApplications.some(otherDevelopmentApplication => otherDevelopmentApplication.applicationNumber === developmentApplication.applicationNumber))
+                    developmentApplication.applicationNumber = `${applicationNumber} (${++suffix})`;  // add a unique suffix
                 developmentApplications.push(developmentApplication);
+            }
         }
-
-        // Attempt to release memory used by the page.
-
-console.log("Releasing memory used by page.");
-        page._destroy();
     }
 
     // Check whether the expected number of development applications have been encountered.
@@ -1036,7 +1049,11 @@ let selectedPdfUrls = [
     "http://www.murraybridge.sa.gov.au/webdata/resources/files/Crystal%20Report%20-%20DevApp%20November%202015.pdf",
     "http://www.murraybridge.sa.gov.au/webdata/resources/files/Crystal%20Report%20-%20DevApp%20October%202016.pdf",
     "http://www.murraybridge.sa.gov.au/webdata/resources/files/Crystal%20Report%20-%20DevApp%20November%202016.pdf",
-    "http://www.murraybridge.sa.gov.au/webdata/resources/files/Crystal%20Report%20-%20DevApp%20August%202017.pdf"
+    "http://www.murraybridge.sa.gov.au/webdata/resources/files/Crystal%20Report%20-%20DevApp%20August%202017.pdf",
+    "http://www.murraybridge.sa.gov.au/webdata/resources/files/Crystal%20Report%20-%20DevApp%20July%202018.pdf",
+    "http://www.murraybridge.sa.gov.au/webdata/resources/files/Crystal%20Report%20-%20DevApp%20May%202016.pdf",
+    "http://www.murraybridge.sa.gov.au/webdata/resources/files/Crystal%20Report%20-%20DevApp%20November%202017.pdf",
+    "http://www.murraybridge.sa.gov.au/webdata/resources/files/Crystal%20Report%20-%20DevAppSeptember%202015.pdf"
 ];
 
     // let selectedPdfUrls: string[] = [];
