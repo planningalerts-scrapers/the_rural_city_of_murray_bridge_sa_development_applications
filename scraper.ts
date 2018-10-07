@@ -6,6 +6,10 @@
 
 "use strict";
 
+console.log=function(a) {};
+module.exports = { log: function(a) {}, error: function(a) {} };
+console.log=function(a) {};
+
 import * as cheerio from "cheerio";
 import * as request from "request-promise-native";
 import * as sqlite3 from "sqlite3";
@@ -479,7 +483,7 @@ function parseApplicationElements(elements: Element[], startElement: Element, in
     // Get the application number.
 
     let applicationNumber = getRightRowText(elements, startElement, middleElement).trim().replace(/\s/g, "");
-    applicationNumber = applicationNumber.replace(/[IlL\[\]\|’,!\(\)]/g, "/").replace(/°/g, "0").replace(/'\//g, "1").replace(/\/\//g, "1/").replace(/201\?/g, "2017");  // for example, converts "17I2017" to "17/2017"
+    applicationNumber = applicationNumber.replace(/[IlL\[\]\|’,!\(\)]/g, "/").replace(/°/g, "0").replace(/'\//g, "1").replace(/\/\//g, "1/").replace(/201\?/g, "2017").replace(/‘/g, "");  // for example, converts "17I2017" to "17/2017"
     if (applicationNumber.length >= 6 && /120[0-9][0-9]$/.test(applicationNumber))
         applicationNumber = applicationNumber.substring(0, applicationNumber.length - 5) + "/" + applicationNumber.substring(applicationNumber.length - 4);  // for example, converts "35612015" to "356/2015"
 
@@ -802,6 +806,15 @@ async function parseImage(image: any, bounds: Rectangle) {
 
     let elements: Element[] = [];
     for (let segment of segments) {
+        // Attempt to avoid using too much memory by scaling down large images.
+
+        let scaleFactor = 1.0;
+        if (segment.bounds.width * segment.bounds.height > 1000 * 1000) {
+            scaleFactor = 0.5;
+            console.log(`Scaling a large image (${segment.bounds.width}×${segment.bounds.height}) by ${scaleFactor} to reduce memory usage.`);
+            segment.image = segment.image.scale(scaleFactor, jimp.RESIZE_BEZIER);
+        }
+
         // Note that textord_old_baselines is set to 0 so that text that is offset by half the
         // height of the the font is correctly recognised.
 
@@ -830,10 +843,10 @@ async function parseImage(image: any, bounds: Rectangle) {
                                 text: word.text,
                                 confidence: word.confidence,
                                 choiceCount: word.choices.length,
-                                x: bounds.x + segment.bounds.x + word.bbox.x0,
-                                y: bounds.y + segment.bounds.y + word.bbox.y0,
-                                width: word.bbox.x1 - word.bbox.x0,
-                                height: word.bbox.y1 - word.bbox.y0
+                                x: bounds.x + segment.bounds.x + word.bbox.x0 / scaleFactor,
+                                y: bounds.y + segment.bounds.y + word.bbox.y0 / scaleFactor,
+                                width: (word.bbox.x1 - word.bbox.x0) / scaleFactor,
+                                height: (word.bbox.y1 - word.bbox.y0) / scaleFactor
                             };
                         }));
     }
