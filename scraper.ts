@@ -116,12 +116,6 @@ function intersect(rectangle1: Rectangle, rectangle2: Rectangle): Rectangle {
         return { x: 0, y: 0, width: 0, height: 0 };
 }
 
-// Inflates a rectangle by the specified amount.
-
-function inflate(rectangle: Rectangle, width: number, height: number) {
-    return { x: rectangle.x - width, y: rectangle.y - height, width: rectangle.width + 2 * width, height: rectangle.height + 2 * height };
-}
-
 // Calculates the area of a rectangle.
 
 function getArea(rectangle: Rectangle) {
@@ -551,7 +545,6 @@ function segmentImage(jimpImage: any) {
     let segments: { image: jimp, bounds: Rectangle }[] = [];
     for (let rectangle of rectangles) {
         let croppedJimpImage: jimp = new (jimp as any)(rectangle.width, rectangle.height);
-        rectangle = intersect(inflate(rectangle, 2, 2), bounds);  // inflate the rectangle slightly to include surrounding white space (because this may help when parsing the image)
         croppedJimpImage.blit(jimpImage, 0, 0, rectangle.x, rectangle.y, rectangle.width, rectangle.height);            
         segments.push({ image: croppedJimpImage, bounds: rectangle });
     }
@@ -966,8 +959,8 @@ async function parsePdf(url: string) {
         // The first page typically has a record count which can be used to determine if all
         // applications are successfully parsed later.
 
-        if (pageIndex === 0 && startElements.length >= 1)  // first page
-            recordCount = getRecordCount(elements, startElements[0]);
+       if (pageIndex === 0 && startElements.length >= 1)  // first page
+           recordCount = getRecordCount(elements, startElements[0]);
 
         // Parse the development application from each group of elements (ie. a section of the
         // current page of the PDF document).  If the same application number is encountered a
@@ -1053,7 +1046,7 @@ async function main() {
     // at once because this may use too much memory, resulting in morph.io terminating the current
     // process).
 
-console.log("Attempt to parse all PDFs (as a memory usage test).");
+console.log("Attempt to parse many PDFs (as a memory usage test).");
 let selectedPdfUrls = [
     "http://www.murraybridge.sa.gov.au/webdata/resources/files/Crystal%20Report%20-%20DevApp%20November%202015.pdf",
     "http://www.murraybridge.sa.gov.au/webdata/resources/files/Crystal%20Report%20-%20DevApp%20October%202016.pdf",
