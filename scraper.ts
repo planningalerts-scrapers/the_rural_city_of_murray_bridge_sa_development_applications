@@ -6,10 +6,6 @@
 
 "use strict";
 
-console.log=function(a) {};
-module.exports = { log: function(a) {}, error: function(a) {} };
-console.log=function(a) {};
-
 import * as cheerio from "cheerio";
 import * as request from "request-promise-native";
 import * as sqlite3 from "sqlite3";
