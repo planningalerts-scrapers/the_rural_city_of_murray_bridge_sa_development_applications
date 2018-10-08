@@ -8,9 +8,9 @@
 
 import * as fs from "fs";
 
-console.log("Preventing the \"pre-main prep time\" message from tesseract.js by updating node_modules//tesseract.js-core//index.js.");
-let data = fs.readFileSync("node_modules//tesseract.js-core//index.js").toString().replace(/Module.\$a\("pre-main prep time\: "\+\(Date\.now\(\)\-tj\)\+" ms"\)/g, "true");
-fs.writeFileSync("node_modules//tesseract.js-core//index.js", data);
+console.log("Preventing the \"pre-main prep time\" message from tesseract.js by updating node_modules/tesseract.js-core/index.js.");
+let data = fs.readFileSync("node_modules/tesseract.js-core/index.js").toString().replace(/Module.\$a\("pre-main prep time\: "\+\(Date\.now\(\)\-tj\)\+" ms"\)/g, "true");
+fs.writeFileSync("node_modules/tesseract.js-core/index.js", data);
 
 import * as cheerio from "cheerio";
 import * as request from "request-promise-native";
