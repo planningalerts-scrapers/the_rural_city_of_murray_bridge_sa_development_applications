@@ -6,6 +6,12 @@
 
 "use strict";
 
+import * as fs from "fs";
+
+console.log("Preventing the \"pre-main prep time\" message from tesseract.js by updating node_modules//tesseract.js-core//index.js.");
+let data = fs.readFileSync("node_modules//tesseract.js-core//index.js").toString().replace(/Module.\$a\("pre-main prep time\: "\+\(Date\.now\(\)\-tj\)\+" ms"\)/g, "true");
+fs.writeFileSync("node_modules//tesseract.js-core//index.js", data);
+
 import * as cheerio from "cheerio";
 import * as request from "request-promise-native";
 import * as sqlite3 from "sqlite3";
@@ -15,7 +21,6 @@ import * as pdfjs from "pdfjs-dist";
 import * as tesseract from "tesseract.js";
 import * as jimp from "jimp";
 import * as didyoumean from "didyoumean2";
-import * as fs from "fs";
 
 sqlite3.verbose();
 
@@ -210,17 +215,21 @@ function readAddressInformation() {
     }
 }
 
-// Gets the elements on the line above (typically an address line).
+// Gets the elements on the line above (typically an address line).  Note that the left hand side
+// of the leftElement is used to limit how far left the search for elements is performed (and so
+// avoids artefacts created right at the left hand side edge of the page being included as valid
+// text, such as "|" in the November 2016 PDF on page 16).
 
-function getAboveElements(elements: Element[], belowElement: Element, middleElement: Element) {
+function getAboveElements(elements: Element[], leftElement: Element, belowElement: Element, middleElement: Element) {
     // Find the elements above (at least a "line" above) the specified "below" element and to the
     // left of the middleElement.  These elements correspond to address elements (assumed to be on
     // one single line).
 
     let addressElements = elements.filter(element =>
         element.y < belowElement.y - belowElement.height &&
-        element.x < middleElement.x - 0.2 * middleElement.width);
-
+        element.x < middleElement.x - 0.2 * middleElement.width &&
+        element.x > leftElement.x - leftElement.height);  // use height rather than width purposely (to avoid too much width)
+        
     // Find the lowest address element (this is assumed to form part of the single line of the
     // address).  Note that middleElement.x is divided by two so that elements on the very right
     // hand side of the rectangle being search will be ignored (these tend to be descriptions
@@ -236,6 +245,7 @@ function getAboveElements(elements: Element[], belowElement: Element, middleElem
     addressElements = elements.filter(element =>
         element.y < belowElement.y - belowElement.height &&
         element.x < middleElement.x - 0.2 * middleElement.width &&
+        element.x > leftElement.x - leftElement.height &&   // use height rather than width purposely (to avoid too much width)
         element.y >= addressBottomElement.y - Math.max(element.height, addressBottomElement.height));
 
     // Sort the address elements by Y co-ordinate and then by X co-ordinate (the Math.max
@@ -357,6 +367,10 @@ function formatAddress(address: string) {
 
     let tokens = address.split(" ");
 
+    // Correct one case where "T CE" was parsed instead of "TCE" (in the May 2016 PDF).
+
+    address = address.replace(/ T CE /g, "TCE");
+
     // It is common for an invalid postcode of "0" to appear on the end of an address.  Remove
     // this if it is present.  For example, "Bremer Range RD CALLINGTON 0".  Remove the post code
     // because this will be derived based on the suburb.
@@ -405,7 +419,7 @@ function formatAddress(address: string) {
 // Gets and formats the address.
 
 function getAddress(elements: Element[], assessmentNumberElement: Element, middleElement: Element) {
-    let addressElements = getAboveElements(elements, assessmentNumberElement, middleElement);
+    let addressElements = getAboveElements(elements, assessmentNumberElement, assessmentNumberElement, middleElement);
     if (addressElements.length === 0)
         return undefined;
     
@@ -421,7 +435,7 @@ function getAddress(elements: Element[], assessmentNumberElement: Element, middl
     let formattedAddress = formatAddress(address);
 
     if (!formattedAddress.hasStreet) {
-        let streetElements = getAboveElements(elements, addressElements[0], middleElement);
+        let streetElements = getAboveElements(elements, assessmentNumberElement, addressElements[0], middleElement);
         if (streetElements.length > 0) {
             let street = streetElements.map(element => element.text).join(" ").trim().replace(/\s\s+/g, " ").replace(/ﬁ/g, "fi").replace(/ﬂ/g, "fl").replace(/\\\//g, "V").replace(/‘/g, "").replace(/’/g, "").replace(/“/g, "").replace(/”/g, "").replace(/—/g, "").replace(/_/g, "").replace(/\./g, "").replace(/\-/g, "").replace(/\//g, "").replace(/!/g, "");
             if (!street.startsWith("Dev Cost") && !street.startsWith("LOT:") && !street.startsWith("LOT ") && !street.startsWith("HD:") && !street.startsWith("HD "))  // finding this text instead of an address indicates that there is no address present
@@ -438,6 +452,7 @@ function getAddress(elements: Element[], assessmentNumberElement: Element, middl
 // Parses the details from the elements associated with a single development application.
 
 function parseApplicationElements(elements: Element[], startElement: Element, informationUrl: string) {
+
     // Find the "Assessment Number" or "Asses Num" text.
 
     let assessmentNumberElement = getAssessmentNumberElement(elements, startElement);
@@ -922,6 +937,12 @@ async function parsePdf(url: string) {
         await pdf.destroy();
         if (global.gc)
             global.gc();
+
+        // Ignore extremely low height elements (because these can be parsed as text but are
+        // very unlikely to be actual text; for example see the October 2016 PDF on page 19).
+        // In some rare cases they may be valid (such as a full stop far from other text).
+
+        elements = elements.filter(element => element.height > 2);
 
         // Sort the elements by Y co-ordinate and then by X co-ordinate.
 
