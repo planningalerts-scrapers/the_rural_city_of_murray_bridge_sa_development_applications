@@ -232,7 +232,7 @@ function getReceivedDateElement(elements, startElement, middleElement) {
     // "lines" from the "Dev App No." text because sometimes the lodged date is offset vertically
     // by a fair amount; in some cases offset up and in other cases offset down).
     let dateElements = elements.filter(element => element.x >= middleElement.x &&
-        element.y + element.height > startElement.y - 2 * startElement.height &&
+        element.y + element.height > startElement.y - 3 * startElement.height &&
         element.y < startElement.y + 3 * startElement.height &&
         moment(element.text.trim(), "D/MM/YYYY", true).isValid());
     // Select the left most date (ie. favour the "lodged" date over the "final descision" date).
