@@ -135,7 +135,7 @@ function getArea(rectangle: Rectangle) {
 function calculateDistance(element1: Element, element2: Element) {
     let point1 = { x: element1.x + element1.width, y: element1.y + element1.height / 2 };
     let point2 = { x: element2.x, y: element2.y + element2.height / 2 };
-    if (point2.x < point1.x - element1.width / 5)  // arbitrary overlap factor of 20%
+    if (point2.x < point1.x - element1.width / 5)  // arbitrary overlap factor of 20% (ie. ignore elements that overlap too much in the horizontal direction)
         return Number.MAX_VALUE;
     return (point2.x - point1.x) * (point2.x - point1.x) + (point2.y - point1.y) * (point2.y - point1.y);
 }
@@ -220,11 +220,11 @@ function readAddressInformation() {
 
 // Gets the elements on the line above (typically an address line).  Note that the left hand side
 // of the leftElement is used to limit how far left the search for elements is performed (and so
-// avoids artefacts created right at the left hand side edge of the page being included as valid
+// avoids artefacts created at the very left hand side edge of the page being included as valid
 // text, such as "|" in the November 2016 PDF on page 16).
 
 function getAboveElements(elements: Element[], leftElement: Element, belowElement: Element, middleElement: Element) {
-    // Find the elements above (at least a "line" above) the specified "below" element and to the
+    // Find the elements above (at least a "line" above) the specified belowElement and to the
     // left of the middleElement.  These elements correspond to address elements (assumed to be on
     // one single line).
 
@@ -235,7 +235,7 @@ function getAboveElements(elements: Element[], leftElement: Element, belowElemen
         
     // Find the lowest address element (this is assumed to form part of the single line of the
     // address).  Note that middleElement.x is divided by two so that elements on the very right
-    // hand side of the rectangle being search will be ignored (these tend to be descriptions
+    // hand side of the rectangle being searched will be ignored (these tend to be descriptions
     // that have been moved too far to the left, overlapping the rectangle in which the address
     // is expected to appear).
 
@@ -285,7 +285,8 @@ function getAboveElements(elements: Element[], leftElement: Element, belowElemen
     return addressElements;
 }
 
-// Finds the element containing the assessment number text.
+// Finds the element containing the "Assessment Number" text.  This is a good starting point from
+// which to find other elements for the application (such as the address elements).
 
 function getAssessmentNumberElement(elements: Element[], startElement: Element) {
     // Find the "Assessment Number" or "Asses Num" text (allowing for spelling errors).
@@ -374,15 +375,15 @@ function formatAddress(address: string) {
 
     let tokens = address.split(" ");
 
-    // It is common for an invalid postcode of "0" to appear on the end of an address.  Remove
-    // this if it is present.  For example, "Bremer Range RD CALLINGTON 0".  Remove the post code
-    // because this will be derived based on the suburb.
+    // It is common for an invalid postcode of "0" to appear at the end of an address.  Remove
+    // this if it is present.  For example, "Bremer Range RD CALLINGTON 0".  The post code can
+    // safely be remove because it will be derived later based on the suburb name.
 
     let postCode = tokens[tokens.length - 1];
     if (/^[0-9]{4}$/.test(postCode) || postCode === "O" || postCode === "0" || postCode === "D")
         tokens.pop();
 
-    // Remove the state abbreviation (this will be determined using the suburb).
+    // Remove the state abbreviation (this will be determined from the suburb; it is always "SA").
 
     let state = tokens[tokens.length - 1];
     if (didyoumean(state, [ "SA" ], { caseSensitive: true, returnType: "first-closest-match", thresholdType: "edit-distance", threshold: 1, trimSpace: true }) !== null)
@@ -465,13 +466,13 @@ function parseApplicationElements(elements: Element[], startElement: Element, in
         return undefined;
     }
 
-    // Find the "Applicant" text.
+    // Find the "Applicant" text (a useful reference point).
 
     let applicantElement = elements.find(element =>
         element.y > startElement.y &&
         didyoumean(element.text, [ "Applicant" ], { caseSensitive: true, returnType: "first-closest-match", thresholdType: "edit-distance", threshold: 3, trimSpace: true }) !== null);
 
-    // Find the "Builder" text.
+    // Find the "Builder" text (a useful reference point).
 
     let builderElement = elements.find(element =>
         element.y > startElement.y &&
@@ -488,7 +489,7 @@ function parseApplicationElements(elements: Element[], startElement: Element, in
         return undefined;
     }
 
-    // Get the application number.
+    // Get the application number (allowing for a lot of common parsing errors).
 
     let applicationNumber = getRightRowText(elements, startElement, middleElement).trim().replace(/\s/g, "");
     applicationNumber = applicationNumber.replace(/[IlL\[\]\|’,!\(\)]/g, "/").replace(/°/g, "0").replace(/'\//g, "1").replace(/\/\//g, "1/").replace(/201\?/g, "2017").replace(/‘/g, "");  // for example, converts "17I2017" to "17/2017"
@@ -519,7 +520,7 @@ function parseApplicationElements(elements: Element[], startElement: Element, in
     let address = getAddress(elements, assessmentNumberElement, middleElement);
     if (address === undefined) {
         let elementSummary = elements.map(element => `[${element.text}]`).join("");
-        console.log(`Application number ${applicationNumber} will be ignored because an address was not found or parsed (searching upwards from the "Assessment Number" or \"Asses Num\" text).  Elements: ${elementSummary}`);
+        console.log(`Application number ${applicationNumber} will be ignored because an address was not found or parsed (searching upwards from the "Assessment Number" or "Asses Num" text).  Elements: ${elementSummary}`);
         return undefined;
     }
 
@@ -548,7 +549,7 @@ function segmentImage(jimpImage: any) {
     if (jimpImage.bitmap.width * jimpImage.bitmap.height < 400 * 400)
         return [{ image: jimpImage, bounds: bounds }];
        
-    // Segment image based on white space.
+    // Segment the image based on white space.
 
     let rectangles: Rectangle[] = [];
     let horizontalRectangles: Rectangle[] = [];
@@ -556,7 +557,7 @@ function segmentImage(jimpImage: any) {
     for (let verticalRectangle of verticalRectangles)
         horizontalRectangles = horizontalRectangles.concat(segmentImageHorizontally(jimpImage, verticalRectangle));
     for (let horizontalRectangle of horizontalRectangles)
-        rectangles = rectangles.concat(segmentImageVertically(jimpImage, horizontalRectangle));
+        rectangles = rectangles.concat(segmentImageVertically(jimpImage, horizontalRectangle));  // repeat the segmentation vertically on the sub-images (because this may then produce even smaller images)
 
     // Extract images delineated by the white space.
 
@@ -597,7 +598,7 @@ function segmentImageVertically(jimpImage: any, bounds: Rectangle) {
 
         if (isWhiteLine) {
             if (isPreviousWhiteLine)
-                whiteBlocks[whiteBlocks.length - 1].height++;  // increase the size of the current block
+                whiteBlocks[whiteBlocks.length - 1].height++;  // increase the size of the current block of white
             else
                 whiteBlocks.push({ y: y, height: 1 });  // start a new block
         }
@@ -609,7 +610,7 @@ function segmentImageVertically(jimpImage: any, bounds: Rectangle) {
 
     whiteBlocks = whiteBlocks.filter(whiteBlock => whiteBlock.height >= 25);
 
-    // Determine the bounds of the rectangles that remain when the blocks of white are removed.
+    // Determine the rectangles that remain when the blocks of white are removed.
 
     let rectangles = [];
     for (let index = 0; index <= whiteBlocks.length; index++) {
@@ -650,7 +651,7 @@ function segmentImageHorizontally(jimpImage: any, bounds: Rectangle) {
 
         if (isWhiteLine) {
             if (isPreviousWhiteLine)
-                whiteBlocks[whiteBlocks.length - 1].width++;  // increase the size of the current block
+                whiteBlocks[whiteBlocks.length - 1].width++;  // increase the size of the current block of white
             else
                 whiteBlocks.push({ x: x, width: 1 });  // start a new block
         }
@@ -710,7 +711,7 @@ function getRecordCount(elements: Element[], startElement: Element) {
 // typically begins with the text "Dev App No.").
 
 function findStartElements(elements: Element[]) {
-    // Examine all the elements on the page that being with "d".
+    // Examine all the elements on the page that being with "D" or "d".
     
     let startElements: Element[] = [];
     for (let element of elements.filter(element => element.text.trim().toLowerCase().startsWith("d"))) {
@@ -761,7 +762,7 @@ function findStartElements(elements: Element[]) {
     return startElements;
 }
 
-// Converts image data from the PDF to a Jimp format image.
+// Converts image data from the PDF to a jimp format image.
 
 function convertToJimpImage(image: any) {
     let pixelSize = (8 * image.data.length) / (image.width * image.height);
@@ -822,9 +823,6 @@ async function parseImage(image: any, bounds: Rectangle) {
             segment.image = segment.image.scale(scaleFactor, jimp.RESIZE_BEZIER);
         }
 
-        // Note that textord_old_baselines is set to 0 so that text that is offset by half the
-        // height of the the font is correctly recognised.
-
         let imageBuffer = await new Promise((resolve, reject) => segment.image.getBuffer(jimp.MIME_PNG, (error, buffer) => error ? reject(error) : resolve(buffer)));
         segment.image = undefined;  // attempt to release memory
 
@@ -835,6 +833,9 @@ async function parseImage(image: any, bounds: Rectangle) {
             console.log(`Memory Usage: rss: ${Math.round(memoryUsage.rss / (1024 * 1024))} MB, heapTotal: ${Math.round(memoryUsage.heapTotal / (1024 * 1024))} MB, heapUsed: ${Math.round(memoryUsage.heapUsed / (1024 * 1024))} MB, external: ${Math.round(memoryUsage.external / (1024 * 1024))} MB`);
         if (segment.bounds.width * segment.bounds.height > 700 * 700)
             console.log(`Parsing a large image with bounds { x: ${Math.round(segment.bounds.x)}, y: ${Math.round(segment.bounds.y)}, width: ${Math.round(segment.bounds.width)}, height: ${Math.round(segment.bounds.height)} }.`);
+
+        // Note that textord_old_baselines is set to 0 so that text that is offset by half the
+        // height of the the font is correctly recognised.
     
         let result: any = await new Promise((resolve, reject) => { tesseract.recognize(imageBuffer, { textord_old_baselines: "0" }).then(function(result) { resolve(result); }) });
         tesseract.terminate();
@@ -876,10 +877,10 @@ async function parsePdf(url: string) {
 
     // Parse the PDF.  Each page has the details of multiple applications.  Note that the PDF is
     // re-parsed on each iteration of the loop (ie. once for each page).  This then avoids large
-    // memory usage by the PDF (just calling page._destroy() on each iteration of the loop is not
-    // enough to release all memory used by the PDF parsing).
+    // memory usage by the PDF (just calling page._destroy() on each iteration of the loop appears
+    // not to be enough to release all memory used by the PDF parsing).
 
-    for (let pageIndex = 0; pageIndex < 1000; pageIndex++) {  // limit to an arbitrarily large number of pages (to avoid any chance of an infinite loop)
+    for (let pageIndex = 0; pageIndex < 500; pageIndex++) {  // limit to an arbitrarily large number of pages (to avoid any chance of an infinite loop)
         let pdf = await pdfjs.getDocument({ data: buffer, disableFontFace: true, ignoreErrors: true });
         if (pageIndex >= pdf.numPages)
             break;
@@ -910,7 +911,7 @@ async function parsePdf(url: string) {
             if (typeof image === "string")
                 image = page.objs.get(image);  // get the actual image using its name
             else
-                operators.argsArray[index][0] = undefined;  // attempt to release memory used by images
+                operators.argsArray[index][0] = undefined;  // attempt to release memory used by the image
 
             // Obtain the transform that applies to the image.  Note that the first image in the
             // PDF typically has a pdfjs.OPS.dependency element in the fnArray between it and its
@@ -957,7 +958,7 @@ async function parsePdf(url: string) {
         elements.sort(elementComparer);
 
         // Group the elements into sections based on where the "Dev App No." text starts (and
-        // any other element the "Dev Ap No." elements line up with horizontally with a margin
+        // any other element the "Dev App No." elements line up with horizontally with a margin
         // of error equal to about the height of the "Dev App No." text; this is done in order
         // to capture the lodged date, which may be higher up than the "Dev App No." text).
 
