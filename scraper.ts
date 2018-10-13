@@ -318,9 +318,9 @@ function getAssessmentNumberElement(elements: Element[], startElement: Element) 
 // Gets the element containining the received date.
 
 function getReceivedDateElement(elements: Element[], startElement: Element, middleElement: Element) {
-    // Search to the right of "Dev App No." for the lodged date (including up and down a few
-    // "lines" from the "Dev App No." text because sometimes the lodged date is offset vertically
-    // by a fair amount; in some cases offset up and in other cases offset down).
+    // Search to the right of "Dev App No." for the lodged date (including some leeway up and
+    // down a few "lines" from the "Dev App No." text because sometimes the lodged date is offset
+    // vertically by a fair amount; in some cases offset up and in other cases offset down).
 
     let dateElements = elements.filter(element => element.x >= middleElement.x &&
         element.y + element.height > startElement.y - 4 * startElement.height &&
@@ -338,7 +338,7 @@ function getReceivedDateElement(elements: Element[], startElement: Element, midd
 function getDescription(elements: Element[], startElement: Element, middleElement: Element, receivedDateElement: Element) {
     // Set the element which delineates the top of the description text.
 
-    let descriptionTopElement = (receivedDateElement === undefined) ? startElement : receivedDateElement;
+    let descriptionTopElementY = (receivedDateElement === undefined) ? startElement.y : (receivedDateElement.y + receivedDateElement.height);
 
     // Set the element which delineates the bottom left of the description text.
     
@@ -346,7 +346,7 @@ function getDescription(elements: Element[], startElement: Element, middleElemen
     
     // Extract the description text.
     
-    let descriptionElements = elements.filter(element => element.y > descriptionTopElement.y + descriptionTopElement.height &&
+    let descriptionElements = elements.filter(element => element.y > descriptionTopElementY &&
         element.y < descriptionBottomLeftElement.y &&
         element.x > descriptionBottomLeftElement.x - 0.2 * descriptionBottomLeftElement.width);
     
@@ -369,9 +369,15 @@ function formatAddress(address: string) {
     if (address === "")
         return { text: "", hasSuburb: false, hasStreet: false };
 
-    // Correct one case where "T CE" was parsed instead of "TCE" (in the May 2016 PDF).
+    // Correct one case where "T CE" was parsed instead of "TCE" (in the May 2016 PDF).  And
+    // also correct several other special cases.
 
-    address = address.replace(/ T CE /g, " TCE ");
+    address = address
+        .replace(/ T CE /g, " TCE ")
+        .replace(/ RD BU /g, " RD ")
+        .replace(/ RD HD /g, " RD ")
+        .replace(/ RD MU /g, " RD ")
+        .replace(/ RD JAENSCH BEACH via /g, " RD ");
 
     let tokens = address.split(" ");
 
@@ -380,7 +386,7 @@ function formatAddress(address: string) {
     // safely be remove because it will be derived later based on the suburb name.
 
     let postCode = tokens[tokens.length - 1];
-    if (/^[0-9]{4}$/.test(postCode) || postCode === "O" || postCode === "0" || postCode === "D")
+    if (/^[0-9]{4}$/.test(postCode) || postCode === "O" || postCode === "0" || postCode === "D" || postCode === "[]" || postCode === "[J")
         tokens.pop();
 
     // Remove the state abbreviation (this will be determined from the suburb; it is always "SA").
@@ -456,7 +462,6 @@ function getAddress(elements: Element[], assessmentNumberElement: Element, middl
 // Parses the details from the elements associated with a single development application.
 
 function parseApplicationElements(elements: Element[], startElement: Element, informationUrl: string) {
-
     // Find the "Assessment Number" or "Asses Num" text.
 
     let assessmentNumberElement = getAssessmentNumberElement(elements, startElement);
@@ -967,14 +972,15 @@ async function parsePdf(url: string) {
         for (let index = 0; index < startElements.length; index++) {
             // Determine the highest Y co-ordinate of this row and the next row (or the bottom of
             // the current page).  Allow some leeway vertically (add some extra height) because
-            // in some cases the lodged date is a fair bit higher up than the "Dev App No." text.
+            // in some cases the lodged date is a fair bit higher up than the "Dev App No." text
+            // (see the similar leeway used in getReceivedDate).
             
             let startElement = startElements[index];
             let raisedStartElement: Element = {
                 text: startElement.text,
                 confidence: startElement.confidence,
                 x: startElement.x,
-                y: startElement.y - 2 * startElement.height,  // leeway
+                y: startElement.y - 3 * startElement.height,  // leeway
                 width: startElement.width,
                 height: startElement.height };
             let rowTop = getRowTop(elements, raisedStartElement);
@@ -989,8 +995,8 @@ async function parsePdf(url: string) {
         // applications are successfully parsed later (although sometimes this record count
         // itself is innaccurate).
 
-       if (pageIndex === 0 && startElements.length >= 1)  // first page
-           recordCount = getRecordCount(elements, startElements[0]);
+        if (pageIndex === 0 && startElements.length >= 1)  // first page
+            recordCount = getRecordCount(elements, startElements[0]);
 
         // Parse the development application from each group of elements (ie. a section of the
         // current page of the PDF document).  If the same application number is encountered a
