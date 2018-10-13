@@ -824,7 +824,7 @@ async function parseImage(image: any, bounds: Rectangle) {
         let scaleFactor = 1.0;
         if (segment.bounds.width * segment.bounds.height > 1000 * 1000) {
             scaleFactor = 0.5;
-            console.log(`Scaling a large image (${segment.bounds.width}×${segment.bounds.height}) by ${scaleFactor} to reduce memory usage.`);
+            console.log(`    Scaling a large image (${segment.bounds.width}×${segment.bounds.height}) by ${scaleFactor} to reduce memory usage.`);
             segment.image = segment.image.scale(scaleFactor, jimp.RESIZE_BEZIER);
         }
 
@@ -835,9 +835,9 @@ async function parseImage(image: any, bounds: Rectangle) {
 
         let memoryUsage = process.memoryUsage();
         if (memoryUsage.rss > 200 * 1024 * 1024)  // 200 MB
-            console.log(`Memory Usage: rss: ${Math.round(memoryUsage.rss / (1024 * 1024))} MB, heapTotal: ${Math.round(memoryUsage.heapTotal / (1024 * 1024))} MB, heapUsed: ${Math.round(memoryUsage.heapUsed / (1024 * 1024))} MB, external: ${Math.round(memoryUsage.external / (1024 * 1024))} MB`);
+            console.log(`    Memory Usage: rss: ${Math.round(memoryUsage.rss / (1024 * 1024))} MB, heapTotal: ${Math.round(memoryUsage.heapTotal / (1024 * 1024))} MB, heapUsed: ${Math.round(memoryUsage.heapUsed / (1024 * 1024))} MB, external: ${Math.round(memoryUsage.external / (1024 * 1024))} MB`);
         if (segment.bounds.width * segment.bounds.height > 700 * 700)
-            console.log(`Parsing a large image with bounds { x: ${Math.round(segment.bounds.x)}, y: ${Math.round(segment.bounds.y)}, width: ${Math.round(segment.bounds.width)}, height: ${Math.round(segment.bounds.height)} }.`);
+            console.log(`    Parsing a large image with bounds { x: ${Math.round(segment.bounds.x)}, y: ${Math.round(segment.bounds.y)}, width: ${Math.round(segment.bounds.width)}, height: ${Math.round(segment.bounds.height)} }.`);
 
         // Note that textord_old_baselines is set to 0 so that text that is offset by half the
         // height of the the font is correctly recognised.
