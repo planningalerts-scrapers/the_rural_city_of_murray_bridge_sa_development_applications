@@ -377,7 +377,8 @@ function formatAddress(address: string) {
         .replace(/ RD BU /g, " RD ")
         .replace(/ RD HD /g, " RD ")
         .replace(/ RD MU /g, " RD ")
-        .replace(/ RD JAENSCH BEACH via /g, " RD ");
+        .replace(/ RD JAENSCH BEACH via /g, " RD ")
+        .replace(/ HVW /g, " HWY ");
 
     let tokens = address.split(" ");
 
