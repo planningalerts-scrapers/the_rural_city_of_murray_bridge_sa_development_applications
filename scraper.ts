@@ -370,15 +370,24 @@ function formatAddress(address: string) {
         return { text: "", hasSuburb: false, hasStreet: false };
 
     // Correct one case where "T CE" was parsed instead of "TCE" (in the May 2016 PDF).  And
-    // also correct several other special cases.
+    // also correct several other special cases.  Only the first instance of the match is
+    // replaced in each case (ie. the regular expressions do not have "g" suffixes).
 
     address = address
-        .replace(/ T CE /g, " TCE ")
-        .replace(/ RD BU /g, " RD ")
-        .replace(/ RD HD /g, " RD ")
-        .replace(/ RD MU /g, " RD ")
-        .replace(/ RD JAENSCH BEACH via /g, " RD ")
-        .replace(/ HVW /g, " HWY ");
+        .replace(/ T CE /, " TCE ")
+        .replace(/ TC E /, " TCE ")
+        .replace(/ RD BU /, " RD ")
+        .replace(/ RD HD /, " RD ")
+        .replace(/ RD MU /, " RD ")
+        .replace(/ RD JAENSCH BEACH via /, " RD ")
+        .replace(/ RD JAENSCH BEACH Via /, " RD ")
+        .replace(/ HVW /, " HWY ")
+        .replace(/^CedarAV /, "Cedar AV ")
+        .replace(/^MyallAV /, "Myall AV ")
+        .replace(/^RuraIAV /, "Rural AV ")
+        .replace(/^RuralAV /, "Rural AV ")
+        .replace(/^VWlowbark /, "Willowbark ")
+        .replace(/ CRESMURRAY /, " CRES MURRAY ");
 
     let tokens = address.split(" ");
 
@@ -498,7 +507,7 @@ function parseApplicationElements(elements: Element[], startElement: Element, in
     // Get the application number (allowing for a lot of common parsing errors).
 
     let applicationNumber = getRightRowText(elements, startElement, middleElement).trim().replace(/\s/g, "");
-    applicationNumber = applicationNumber.replace(/[IlL\[\]\|’,!\(\)\{\}]/g, "/").replace(/°/g, "0").replace(/'\//g, "1").replace(/\/\//g, "1/").replace(/201\?/g, "2017").replace(/‘/g, "");  // for example, converts "17I2017" to "17/2017"
+    applicationNumber = applicationNumber.replace(/[IlL\[\]\|’,!\(\)\{\}]/g, "/").replace(/°/g, "0").replace(/'\//g, "1").replace(/\/\//g, "1/").replace(/201\?/g, "2017").replace(/‘/g, "").replace(/'/g, "");  // for example, converts "17I2017" to "17/2017"
     if (applicationNumber.length >= 6 && /120[0-9][0-9]$/.test(applicationNumber))
         applicationNumber = applicationNumber.substring(0, applicationNumber.length - 5) + "/" + applicationNumber.substring(applicationNumber.length - 4);  // for example, converts "35612015" to "356/2015"
 
@@ -950,9 +959,12 @@ async function parsePdf(url: string) {
             // X and Y co-ordinates.  It is easier just to ignore this first image.  In one case
             // the text "HI:" was parsed and interfered with the "Dev App No." text resulting in
             // an application being missed (see page 21 of the May 2018 PDF).
+            //
+            // Note that some PDFs have just one image with a scale of 2.777777 (and this should
+            // be parsed).
 
             let scaleY = image.height / transform[3];
-            if (scaleY < 3 && isFirstImage && image.height >= 1000 && image.width >= 1000)
+            if (scaleY < 2.5 && isFirstImage && image.height >= 1000 && image.width >= 1000)
                 continue;
             isFirstImage = false;
            
@@ -1103,6 +1115,7 @@ async function main() {
 
 console.log("Attempt to parse many PDFs (as a memory usage test).");
 let selectedPdfUrls = [
+    "http://www.murraybridge.sa.gov.au/webdata/resources/files/Crystal%20Report%20-%20DevApp%20July%202018.pdf",
     "http://www.murraybridge.sa.gov.au/webdata/resources/files/Crystal%20Report%20-%20DevApp%20December%202016.pdf",
     "http://www.murraybridge.sa.gov.au/webdata/resources/files/Crystal%20Report%20-%20DevApp%20November%202016.pdf",
     "http://www.murraybridge.sa.gov.au/webdata/resources/files/Crystal%20Report%20-%20DevApp%20October%202016.pdf",
