@@ -381,6 +381,7 @@ function formatAddress(address: string) {
         .replace(/ RD MU /, " RD ")
         .replace(/ RD JAENSCH BEACH via /, " RD ")
         .replace(/ RD JAENSCH BEACH Via /, " RD ")
+        .replace(/ RDJAENSCH BEACH via /, " RD ")
         .replace(/ HVW /, " HWY ")
         .replace(/^CedarAV /, "Cedar AV ")
         .replace(/^MyallAV /, "Myall AV ")
@@ -1113,33 +1114,12 @@ async function main() {
     // at once because this may use too much memory, resulting in morph.io terminating the current
     // process).
 
-console.log("Attempt to parse many PDFs (as a memory usage test).");
-let selectedPdfUrls = [
-    "http://www.murraybridge.sa.gov.au/webdata/resources/files/Crystal%20Report%20-%20DevApp%20July%202018.pdf",
-    "http://www.murraybridge.sa.gov.au/webdata/resources/files/Crystal%20Report%20-%20DevApp%20December%202016.pdf",
-    "http://www.murraybridge.sa.gov.au/webdata/resources/files/Crystal%20Report%20-%20DevApp%20November%202016.pdf",
-    "http://www.murraybridge.sa.gov.au/webdata/resources/files/Crystal%20Report%20-%20DevApp%20October%202016.pdf",
-    "http://www.murraybridge.sa.gov.au/webdata/resources/files/Crystal%20Report%20-%20DevApp%20September%202016.pdf",
-    "http://www.murraybridge.sa.gov.au/webdata/resources/files/Crystal%20Report%20-%20DevApp%20August%202016.pdf",
-    "http://www.murraybridge.sa.gov.au/webdata/resources/files/Crystal%20Report%20-%20DevApp%20July%202016.pdf",
-    "http://www.murraybridge.sa.gov.au/webdata/resources/files/Crystal%20Report%20-%20DevApp%20June%202016.pdf",
-    "http://www.murraybridge.sa.gov.au/webdata/resources/files/Crystal%20Report%20-%20DevApp%20May%202016.pdf",
-    "http://www.murraybridge.sa.gov.au/webdata/resources/files/Crystal%20Report%20-%20DevApp%20April%202016.pdf",
-    "http://www.murraybridge.sa.gov.au/webdata/resources/files/Crystal%20Report%20-%20DevApp%20March%202016.pdf",
-    "http://www.murraybridge.sa.gov.au/webdata/resources/files/Crystal%20Report%20-%20DevApp%20February%202016.pdf",
-    "http://www.murraybridge.sa.gov.au/webdata/resources/files/Crystal%20Report%20-%20DevApp%20January%202016.pdf",
-    "http://www.murraybridge.sa.gov.au/webdata/resources/files/Crystal%20Report%20-%20DevApp%20November%202015.pdf",
-    "http://www.murraybridge.sa.gov.au/webdata/resources/files/Crystal%20Report%20-%20DevAppSeptember%202015.pdf",
-    "http://www.murraybridge.sa.gov.au/webdata/resources/files/Crystal%20Report%20-%20DevApp%20August%202015.pdf",
-    "http://www.murraybridge.sa.gov.au/webdata/resources/files/Crystal%20Report%20-%20DevApp%20July%202015.pdf"
-];
-
-    // let selectedPdfUrls: string[] = [];
-    // selectedPdfUrls.push(pdfUrls.shift());
-    // if (pdfUrls.length > 0)
-    //     selectedPdfUrls.push(pdfUrls[getRandom(1, pdfUrls.length)]);
-    // if (getRandom(0, 2) === 0)
-    //     selectedPdfUrls.reverse();
+    let selectedPdfUrls: string[] = [];
+    selectedPdfUrls.push(pdfUrls.shift());
+    if (pdfUrls.length > 0)
+        selectedPdfUrls.push(pdfUrls[getRandom(1, pdfUrls.length)]);
+    if (getRandom(0, 2) === 0)
+        selectedPdfUrls.reverse();
 
     for (let pdfUrl of selectedPdfUrls) {
         console.log(`Parsing document: ${pdfUrl}`);
