@@ -448,7 +448,7 @@ function isAddress(address: string) {
     return address !== "" && !address.startsWith("Dev Cost") && !address.startsWith("Total Area") && !(address.includes(" Cost") && address.includes("$") && address.includes(","));  // ignores text such as "my Cost: $150,000" (really: "Dev Cost: $160,000") found in "Crystal Report - DevApp November 2015.pdf"
 }
 
-function isHundredAddress(address: string) {
+function isLegalDescription(address: string) {
     return address !== "" && (address.startsWith("HD") || address.startsWith("LOT") || address.startsWith("PCE") || address.startsWith("PLT")  || address.startsWith("SIT"));
 }
 
@@ -457,18 +457,15 @@ function getAddress(elements: Element[], assessmentNumberElement: Element, middl
 
     let addressLine3Elements = getAboveElements(elements, assessmentNumberElement, assessmentNumberElement, middleElement);
     let addressLine3 = joinAddressElements(addressLine3Elements)
-console.log(`    Line 3: ${addressLine3}`);
     if (!isAddress(addressLine3))
         return { address: undefined, legalDescription: undefined };
 
     let addressLine2Elements = getAboveElements(elements, assessmentNumberElement, addressLine3Elements[0], middleElement);
     let addressLine2 = joinAddressElements(addressLine2Elements)
-console.log(`    Line 2: ${addressLine2}`);
     addressLine2 = isAddress(addressLine2) ? addressLine2 : "";
 
     let addressLine1Elements = isAddress(addressLine2) ? getAboveElements(elements, assessmentNumberElement, addressLine2Elements[0], middleElement) : [];
     let addressLine1 = joinAddressElements(addressLine1Elements)
-console.log(`    Line 1: ${addressLine1}`);
     addressLine1 = isAddress(addressLine1) ? addressLine1 : "";
     
     // Construct the address from the discovered address elements (and attempt to correct some
@@ -476,29 +473,18 @@ console.log(`    Line 1: ${addressLine1}`);
     // street name on the line above.
 
     let formattedAddress = formatAddress(addressLine3);
-    if (!formattedAddress.hasStreet && isAddress(addressLine2) && !isHundredAddress(addressLine2))
+    if (!formattedAddress.hasStreet && isAddress(addressLine2) && !isLegalDescription(addressLine2))
         formattedAddress = formatAddress(addressLine2 + " " + formattedAddress.text);
 
-    // Attempt to extract any legal name address (eg. a hundred name and lot number).
+    // Attempt to extract any legal description (eg. a hundred name and lot number).
 
-    let hundredAddress = "";
-    if (isHundredAddress(addressLine1))
-        hundredAddress += ((hundredAddress === "") ? "" : " ") + addressLine1;
-    if (isHundredAddress(addressLine2))
-        hundredAddress += ((hundredAddress === "") ? "" : " ") + addressLine2;
-    if (isHundredAddress(addressLine3))
-        hundredAddress += ((hundredAddress === "") ? "" : " ") + addressLine3;
-
-    let legalDescription = hundredAddress;
-
-if (formattedAddress.text === "")
-console.log(`Address: ** MISSING ADDRESS**`);
-else
-console.log(`Address: ${formattedAddress.text}`);
-if (hundredAddress === "")
-console.log(`Legal: ** MISSING LEGAL**`);
-else
-console.log(`Legal: ${hundredAddress}`);
+    let legalDescription = "";
+    if (isLegalDescription(addressLine1))
+        legalDescription += ((legalDescription === "") ? "" : " ") + addressLine1;
+    if (isLegalDescription(addressLine2))
+        legalDescription += ((legalDescription === "") ? "" : " ") + addressLine2;
+    if (isLegalDescription(addressLine3))
+        legalDescription += ((legalDescription === "") ? "" : " ") + addressLine3;
 
     return { address: formattedAddress.text, legalDescription: legalDescription };
 }
