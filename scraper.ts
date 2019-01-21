@@ -45,7 +45,7 @@ async function initializeDatabase() {
     return new Promise((resolve, reject) => {
         let database = new sqlite3.Database("data.sqlite");
         database.serialize(() => {
-            database.run("create table if not exists [data] ([council_reference] text primary key, [address] text, [description] text, [info_url] text, [comment_url] text, [date_scraped] text, [date_received] text)");
+            database.run("create table if not exists [data] ([council_reference] text primary key, [address] text, [description] text, [info_url] text, [comment_url] text, [date_scraped] text, [date_received] text, [legal_description] text)");
             resolve(database);
         });
     });
@@ -55,7 +55,7 @@ async function initializeDatabase() {
 
 async function insertRow(database, developmentApplication) {
     return new Promise((resolve, reject) => {
-        let sqlStatement = database.prepare("insert or ignore into [data] values (?, ?, ?, ?, ?, ?, ?)");
+        let sqlStatement = database.prepare("insert or ignore into [data] values (?, ?, ?, ?, ?, ?, ?, ?)");
         sqlStatement.run([
             developmentApplication.applicationNumber,
             developmentApplication.address,
@@ -63,16 +63,17 @@ async function insertRow(database, developmentApplication) {
             developmentApplication.informationUrl,
             developmentApplication.commentUrl,
             developmentApplication.scrapeDate,
-            developmentApplication.receivedDate
+            developmentApplication.receivedDate,
+            developmentApplication.legalDescription
         ], function(error, row) {
             if (error) {
                 console.error(error);
                 reject(error);
             } else {
                 if (this.changes > 0)
-                    console.log(`    Inserted: application \"${developmentApplication.applicationNumber}\" with address \"${developmentApplication.address}\", description \"${developmentApplication.description}\" and received date \"${developmentApplication.receivedDate}\" into the database.`);
+                    console.log(`    Inserted: application \"${developmentApplication.applicationNumber}\" with address \"${developmentApplication.address}\", description \"${developmentApplication.description}\", legal description \"${developmentApplication.legalDescription}\" and received date \"${developmentApplication.receivedDate}\" into the database.`);
                 else
-                    console.log(`    Skipped: application \"${developmentApplication.applicationNumber}\" with address \"${developmentApplication.address}\", description \"${developmentApplication.description}\" and received date \"${developmentApplication.receivedDate}\" because it was already present in the database.`);
+                    console.log(`    Skipped: application \"${developmentApplication.applicationNumber}\" with address \"${developmentApplication.address}\", description \"${developmentApplication.description}\", legal description \"${developmentApplication.legalDescription}\" and received date \"${developmentApplication.receivedDate}\" because it was already present in the database.`);
                 sqlStatement.finalize();  // releases any locks
                 resolve(row);
             }
@@ -439,35 +440,67 @@ function formatAddress(address: string) {
 
 // Gets and formats the address.
 
+function joinAddressElements(elements: Element[]) {
+    return elements.map(element => element.text).join(" ").trim().replace(/\s\s+/g, " ").replace(/ﬁ/g, "fi").replace(/ﬂ/g, "fl").replace(/\\\//g, "V").replace(/‘/g, "").replace(/’/g, "").replace(/“/g, "").replace(/”/g, "").replace(/—/g, "").replace(/_/g, "").replace(/\./g, "").replace(/\-/g, "").replace(/\//g, "").replace(/!/g, "");
+}
+
+function isAddress(address: string) {
+    return address !== "" && !address.startsWith("Dev Cost") && !address.startsWith("Total Area") && !(address.includes(" Cost") && address.includes("$") && address.includes(","));  // ignores text such as "my Cost: $150,000" (really: "Dev Cost: $160,000") found in "Crystal Report - DevApp November 2015.pdf"
+}
+
+function isHundredAddress(address: string) {
+    return address !== "" && (address.startsWith("HD") || address.startsWith("LOT") || address.startsWith("PCE") || address.startsWith("PLT")  || address.startsWith("SIT"));
+}
+
 function getAddress(elements: Element[], assessmentNumberElement: Element, middleElement: Element) {
-    let addressElements = getAboveElements(elements, assessmentNumberElement, assessmentNumberElement, middleElement);
-    if (addressElements.length === 0)
-        return undefined;
+    // Allow for up to three lines in the address.
+
+    let addressLine3Elements = getAboveElements(elements, assessmentNumberElement, assessmentNumberElement, middleElement);
+    let addressLine3 = joinAddressElements(addressLine3Elements)
+console.log(`    Line 3: ${addressLine3}`);
+    if (!isAddress(addressLine3))
+        return { address: undefined, legalDescription: undefined };
+
+    let addressLine2Elements = getAboveElements(elements, assessmentNumberElement, addressLine3Elements[0], middleElement);
+    let addressLine2 = joinAddressElements(addressLine2Elements)
+console.log(`    Line 2: ${addressLine2}`);
+    addressLine2 = isAddress(addressLine2) ? addressLine2 : "";
+
+    let addressLine1Elements = isAddress(addressLine2) ? getAboveElements(elements, assessmentNumberElement, addressLine2Elements[0], middleElement) : [];
+    let addressLine1 = joinAddressElements(addressLine1Elements)
+console.log(`    Line 1: ${addressLine1}`);
+    addressLine1 = isAddress(addressLine1) ? addressLine1 : "";
     
     // Construct the address from the discovered address elements (and attempt to correct some
-    // spelling errors).
+    // spelling errors).  Note that if the address starts with a suburb then there may be a
+    // street name on the line above.
 
-    let address = addressElements.map(element => element.text).join(" ").trim().replace(/\s\s+/g, " ").replace(/ﬁ/g, "fi").replace(/ﬂ/g, "fl").replace(/\\\//g, "V").replace(/‘/g, "").replace(/’/g, "").replace(/“/g, "").replace(/”/g, "").replace(/—/g, "").replace(/_/g, "").replace(/\./g, "").replace(/\-/g, "").replace(/\//g, "").replace(/!/g, "");
-    if (address.startsWith("Dev Cost") || address.startsWith("LOT:") || address.startsWith("LOT ") || address.startsWith("HD:") || address.startsWith("HD "))  // finding this text instead of an address indicates that there is no address present
-        return undefined;
+    let formattedAddress = formatAddress(addressLine3);
+    if (!formattedAddress.hasStreet && isAddress(addressLine2) && !isHundredAddress(addressLine2))
+        formattedAddress = formatAddress(addressLine2 + " " + formattedAddress.text);
 
-    // If the address starts with a suburb then there may be a street name on the line above.
+    // Attempt to extract any legal name address (eg. a hundred name and lot number).
 
-    let formattedAddress = formatAddress(address);
+    let hundredAddress = "";
+    if (isHundredAddress(addressLine1))
+        hundredAddress += ((hundredAddress === "") ? "" : " ") + addressLine1;
+    if (isHundredAddress(addressLine2))
+        hundredAddress += ((hundredAddress === "") ? "" : " ") + addressLine2;
+    if (isHundredAddress(addressLine3))
+        hundredAddress += ((hundredAddress === "") ? "" : " ") + addressLine3;
 
-    if (!formattedAddress.hasStreet) {
-        let streetElements = getAboveElements(elements, assessmentNumberElement, addressElements[0], middleElement);
-        if (streetElements.length > 0) {
-            let street = streetElements.map(element => element.text).join(" ").trim().replace(/\s\s+/g, " ").replace(/ﬁ/g, "fi").replace(/ﬂ/g, "fl").replace(/\\\//g, "V").replace(/‘/g, "").replace(/’/g, "").replace(/“/g, "").replace(/”/g, "").replace(/—/g, "").replace(/_/g, "").replace(/\./g, "").replace(/\-/g, "").replace(/\//g, "").replace(/!/g, "");
-            if (!street.startsWith("Dev Cost") && !street.startsWith("LOT:") && !street.startsWith("LOT ") && !street.startsWith("HD:") && !street.startsWith("HD "))  // finding this text instead of an address indicates that there is no address present
-                formattedAddress = formatAddress(street + " " + formattedAddress.text);
-        }
-    }
+    let legalDescription = hundredAddress;
 
-    if (formattedAddress.text === "" || formattedAddress.text.startsWith("Dev Cost") || formattedAddress.text.startsWith("Total Area"))
-        return undefined;
+if (formattedAddress.text === "")
+console.log(`Address: ** MISSING ADDRESS**`);
+else
+console.log(`Address: ${formattedAddress.text}`);
+if (hundredAddress === "")
+console.log(`Legal: ** MISSING LEGAL**`);
+else
+console.log(`Legal: ${hundredAddress}`);
 
-    return formattedAddress.text;
+    return { address: formattedAddress.text, legalDescription: legalDescription };
 }
 
 // Parses the details from the elements associated with a single development application.
@@ -533,7 +566,7 @@ function parseApplicationElements(elements: Element[], startElement: Element, in
 
     // Get the address.
 
-    let address = getAddress(elements, assessmentNumberElement, middleElement);
+    let { address, legalDescription } = getAddress(elements, assessmentNumberElement, middleElement);
     if (address === undefined) {
         let elementSummary = elements.map(element => `[${element.text}]`).join("");
         console.log(`Application number ${applicationNumber} will be ignored because an address was not found or parsed (searching upwards from the "Assessment Number" or "Asses Num" text).  Elements: ${elementSummary}`);
@@ -547,7 +580,8 @@ function parseApplicationElements(elements: Element[], startElement: Element, in
         informationUrl: informationUrl,
         commentUrl: CommentUrl,
         scrapeDate: moment().format("YYYY-MM-DD"),
-        receivedDate: (receivedDate !== undefined && receivedDate.isValid()) ? receivedDate.format("YYYY-MM-DD") : ""
+        receivedDate: (receivedDate !== undefined && receivedDate.isValid()) ? receivedDate.format("YYYY-MM-DD") : "",
+        legalDescription: legalDescription
     };
 }
 
