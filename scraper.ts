@@ -781,6 +781,8 @@ function findStartElements(elements: Element[]) {
         // Chose the best match (if any matches were found).
 
         if (matches.length > 0) {
+let elementSummary = elements.map(element => `[${(element.text === undefined) ? "undefined" : element.text}]`).join("");
+console.log(`    For tracing purposes the elements are: ${elementSummary}`);
             let bestMatch = matches.reduce((previous, current) =>
                 (previous === undefined ||
                 current.threshold < previous.threshold ||
@@ -940,8 +942,6 @@ async function parsePdf(url: string) {
             let width = item.width;
             let height = workaroundHeight;
 
-            if (item.str === undefined)
-                item.str = "";
             return { text: item.str, x: x, y: y, width: width, height: height };
         });
         console.log(`    Found ${textElements.length} text element(s).`)
