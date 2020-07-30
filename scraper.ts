@@ -811,6 +811,8 @@ function findElement(elements: Element[], text: string, shouldSelectRightmostEle
     let condensedText = text.replace(/[\s,\-_]/g, "").toLowerCase();
     let firstCharacter = condensedText.charAt(0);
 
+console.log(`    findElement(${text}), condensedText ${condensedText}, firstCharacter ${firstCharacter}`);
+
     let matches = [];
     for (let element of elements.filter(element => element.text.trim().toLowerCase().startsWith(firstCharacter))) {
         // Extract up to 5 elements to the right of the element that has text starting with the
@@ -830,9 +832,9 @@ function findElement(elements: Element[], text: string, shouldSelectRightmostEle
             if (currentText.length >= condensedText.length - 2) {  // ignore until the text is close to long enough
                 if (currentText === condensedText)
                     matches.push({ leftElement: rightElements[0], rightElement: rightElement, threshold: 0, text: currentText });
-                else if (didyoumean(currentText, [ condensedText ], { caseSensitive: false, returnType: "first-closest-match", thresholdType: "edit-distance", threshold: 1, trimSpaces: true }) !== null)
+                else if (didyoumean(currentText, [ condensedText ], { caseSensitive: false, returnType: "first-closest-match", thresholdType: "edit-distance", threshold: 1, trimSpace: true }) !== null)
                     matches.push({ leftElement: rightElements[0], rightElement: rightElement, threshold: 1, text: currentText });
-                else if (didyoumean(currentText, [ condensedText ], { caseSensitive: false, returnType: "first-closest-match", thresholdType: "edit-distance", threshold: 2, trimSpaces: true }) !== null)
+                else if (didyoumean(currentText, [ condensedText ], { caseSensitive: false, returnType: "first-closest-match", thresholdType: "edit-distance", threshold: 2, trimSpace: true }) !== null)
                     matches.push({ leftElement: rightElements[0], rightElement: rightElement, threshold: 2, text: currentText });
             }
 
@@ -848,6 +850,10 @@ function findElement(elements: Element[], text: string, shouldSelectRightmostEle
     // Note that if the match is made of several elements then sometimes the caller requires the
     // left most element and sometimes the right most element (depending on where further text
     // will be searched for relative to this "found" element).
+
+let elementSummary = elements.map(element => `[${element.text}]`).join("");
+console.log(`Elements: ${elementSummary}`);
+console.log(`Found ${matches.length} matches.`);
 
     if (matches.length > 0) {
         let bestMatch = matches.reduce((previous, current) =>
