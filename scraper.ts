@@ -940,10 +940,10 @@ async function parsePdf(url: string) {
             let width = item.width;
             let height = workaroundHeight;
 
+            if (item.str === undefined)
+                item.str = "";
             return { text: item.str, x: x, y: y, width: width, height: height };
         });
-        if (textElements === undefined)
-            textElements = [];
         console.log(`    Found ${textElements.length} text element(s).`)
 
         // Find all image elements.
@@ -1025,7 +1025,7 @@ async function parsePdf(url: string) {
 
         let elements: Element[] = [];
         elements = elements.concat(textElements);
-        elements =elements.concat(imageElements);
+        elements = elements.concat(imageElements);
         console.log(`    Found a total of ${elements.length} text and image element(s).`)
 
         // Release the memory used by the PDF now that it is no longer required (it will be
