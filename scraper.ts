@@ -492,7 +492,13 @@ function getAddress(elements: Element[], assessmentNumberElement: Element, middl
 function parseApplicationElements(elements: Element[], startElement: Element, informationUrl: string) {
     // Find the "Assessment Number" or "Asses Num" text.
 
-    let assessmentNumberElement = getAssessmentNumberElement(elements, startElement);
+    // let assessmentNumberElement = getAssessmentNumberElement(elements, startElement);
+
+    let assessmentNumberElement = findElement(elements, "Asses Num", false);
+    if (assessmentNumberElement === undefined)
+        assessmentNumberElement = findElement(elements, "Assess Num", false);
+    if (assessmentNumberElement === undefined)
+        assessmentNumberElement = findElement(elements, "Assessment Number", false);
     if (assessmentNumberElement === undefined) {
         let elementSummary = elements.map(element => `[${element.text}]`).join("");
         console.log(`Could not find the \"Assessment Number\", \"Assess Num\" or \"Asses Num\" text on the PDF page for the current development application.  The development application will be ignored.  Elements: ${elementSummary}`);
@@ -768,11 +774,11 @@ function findStartElements(elements: Element[]) {
                 break;
             if (text.length >= 7) {  // ignore until the text is close to long enough
                 if (text === "devappno" || text === "devappno.")
-                    matches.push({ element: rightElement, threshold: 0 });
+                    matches.push({ element: rightElement, threshold: 0, text: text });
                 else if (didyoumean(text, [ "DevAppNo", "DevAppNo." ], { caseSensitive: false, returnType: "first-closest-match", thresholdType: "edit-distance", threshold: 1, trimSpace: true }) !== null)
-                    matches.push({ element: rightElement, threshold: 1 });
+                    matches.push({ element: rightElement, threshold: 1, text: text });
                 else if (didyoumean(text, [ "DevAppNo", "DevAppNo." ], { caseSensitive: false, returnType: "first-closest-match", thresholdType: "edit-distance", threshold: 2, trimSpace: true }) !== null)
-                    matches.push({ element: rightElement, threshold: 2 });
+                    matches.push({ element: rightElement, threshold: 2, text: text });
             }
 
             rightElement = getRightElement(elements, rightElement);
@@ -781,14 +787,10 @@ function findStartElements(elements: Element[]) {
         // Chose the best match (if any matches were found).
 
         if (matches.length > 0) {
-let elementSummary = elements.map(element => `[${(element.text === undefined) ? "undefined" : element.text}]`).join("");
-console.log(`    For tracing purposes the elements are: ${elementSummary}`);
-let matchSummary = matches.map(match => `[${match.element.text},${match.threshold},${match.element.text.trim().length}]`).join("");
-console.log(`    For tracing purposes the match elements are: ${matchSummary}`);
             let bestMatch = matches.reduce((previous, current) =>
                 (previous === undefined ||
                 current.threshold < previous.threshold ||
-                (current.threshold === previous.threshold && Math.abs(current.element.text.trim().length - "DevAppNo.".length) <= Math.abs(previous.element.text.trim().length - "DevAppNo.".length)) ? current : previous), undefined);
+                (current.threshold === previous.threshold && Math.abs(current.text.trim().length - "DevAppNo.".length) <= Math.abs(previous.text.trim().length - "DevAppNo.".length)) ? current : previous), undefined);
             startElements.push(bestMatch.element);
         }
     }
@@ -798,6 +800,64 @@ console.log(`    For tracing purposes the match elements are: ${matchSummary}`);
     let yComparer = (a, b) => (a.y > b.y) ? 1 : ((a.y < b.y) ? -1 : 0);
     startElements.sort(yComparer);
     return startElements;
+}
+
+// Finds the element that most closely matches the specified text.
+
+function findElement(elements: Element[], text: string, shouldSelectRightmostElement: boolean) {
+    // Examine all the elements on the page that being with the same character as the requested
+    // text.
+    
+    let condensedText = text.replace(/[\s,\-_]/g, "").toLowerCase();
+    let firstCharacter = condensedText.charAt(0);
+
+    let matches = [];
+    for (let element of elements.filter(element => element.text.trim().toLowerCase().startsWith(firstCharacter))) {
+        // Extract up to 5 elements to the right of the element that has text starting with the
+        // required character (and so may be the start of the requested text).  Join together the
+        // elements to the right in an attempt to find the best match to the text.
+
+        let rightElement = element;
+        let rightElements: Element[] = [];
+
+        do {
+            rightElements.push(rightElement);
+
+            let currentText = rightElements.map(element => element.text).join("").replace(/[\s,\-_]/g, "").toLowerCase();
+
+            if (currentText.length > condensedText.length + 2)  // stop once the text is too long
+                break;
+            if (currentText.length >= condensedText.length - 2) {  // ignore until the text is close to long enough
+                if (currentText === condensedText)
+                    matches.push({ leftElement: rightElements[0], rightElement: rightElement, threshold: 0, text: currentText });
+                else if (didyoumean(currentText, [ condensedText ], { caseSensitive: false, returnType: didyoumean.ReturnTypeEnums.FIRST_CLOSEST_MATCH, thresholdType: didyoumean.ThresholdTypeEnums.EDIT_DISTANCE, threshold: 1, trimSpaces: true }) !== null)
+                    matches.push({ leftElement: rightElements[0], rightElement: rightElement, threshold: 1, text: currentText });
+                else if (didyoumean(currentText, [ condensedText ], { caseSensitive: false, returnType: didyoumean.ReturnTypeEnums.FIRST_CLOSEST_MATCH, thresholdType: didyoumean.ThresholdTypeEnums.EDIT_DISTANCE, threshold: 2, trimSpaces: true }) !== null)
+                    matches.push({ leftElement: rightElements[0], rightElement: rightElement, threshold: 2, text: currentText });
+            }
+
+            rightElement = getRightElement(elements, rightElement);
+        } while (rightElement !== undefined && rightElements.length < 5);  // up to 5 elements
+    }
+
+    // Chose the best match (if any matches were found).  Note that trimming is performed here so
+    // that text such as "  Plan" is matched in preference to text such as "plan)" (when looking
+    // for elements that match "Plan").  For an example of this problem see "200/303/07" in
+    // "https://www.walkerville.sa.gov.au/webdata/resources/files/DA%20Register%20-%202007.pdf".
+    //
+    // Note that if the match is made of several elements then sometimes the caller requires the
+    // left most element and sometimes the right most element (depending on where further text
+    // will be searched for relative to this "found" element).
+
+    if (matches.length > 0) {
+        let bestMatch = matches.reduce((previous, current) =>
+            (previous === undefined ||
+            current.threshold < previous.threshold ||
+            (current.threshold === previous.threshold && Math.abs(current.text.trim().length - condensedText.length) < Math.abs(previous.text.trim().length - condensedText.length)) ? current : previous), undefined);
+        return shouldSelectRightmostElement ? bestMatch.rightElement : bestMatch.leftElement;
+    }
+
+    return undefined;
 }
 
 // Converts image data from the PDF to a jimp format image.
@@ -1023,12 +1083,13 @@ async function parsePdf(url: string) {
         }
         console.log(`    Found ${imageElements.length} image element(s).`)
 
-        // Merge the elements extracted from the text with the elements extracted from the images.
+        // Merge the elements extracted from the text on the current page with the elements
+        // extracted from the images on the current page.
 
         let elements: Element[] = [];
         elements = elements.concat(textElements);
         elements = elements.concat(imageElements);
-        console.log(`    Found a total of ${elements.length} text and image element(s).`)
+        console.log(`    Found a total of ${elements.length} text and image element(s) on the current page.`)
 
         // Release the memory used by the PDF now that it is no longer required (it will be
         // re-parsed on the next iteration of the loop for the next page).
@@ -1059,6 +1120,7 @@ async function parsePdf(url: string) {
             let elementSummary = elements.map(element => `[${element.text}]`).join("");
             console.log(`    Could not find any start elements in: ${elementSummary}`);
         }
+
         for (let index = 0; index < startElements.length; index++) {
             // Determine the highest Y co-ordinate of this row and the next row (or the bottom of
             // the current page).  Allow some leeway vertically (add some extra height) because
