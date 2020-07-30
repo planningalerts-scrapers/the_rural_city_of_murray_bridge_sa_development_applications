@@ -969,17 +969,23 @@ async function parsePdf(url: string) {
 
         let textContent = await page.getTextContent();
         let viewport = await page.getViewport(1.0);
-    
+
         let textElements: Element[] = textContent.items.map(item => {
             let transform = pdfjs.Util.transform(viewport.transform, item.transform);
-    
+
             // Work around the issue https://github.com/mozilla/pdf.js/issues/8276 (heights are
             // exaggerated).  The problem seems to be that the height value is too large in some
             // PDFs.  Provide an alternative, more accurate height value by using a calculation
             // based on the transform matrix.
-    
+
             let workaroundHeight = Math.sqrt(transform[2] * transform[2] + transform[3] * transform[3]);
-            return { text: item.str, confidence: 100, choiceCount: 1, bounds: { x: transform[4], y: transform[5], width: item.width, height: workaroundHeight } };
+
+            let x = transform[4];
+            let y = transform[5];
+            let width = item.width;
+            let height = workaroundHeight;
+
+            return { text: item.str, x: x, y: y, width: width, height: height };
         });
         console.log(`    Found ${textElements.length} text element(s).`)
 
