@@ -162,7 +162,7 @@ function getRightElement(elements: Element[], element: Element) {
     for (let rightElement of elements)
         if (isVerticalOverlap(element, rightElement) &&  // ensure that there is at least some vertical overlap
             getVerticalOverlapPercentage(element, rightElement) > 50 &&  // avoid extremely tall elements (ensure at least 50% overlap)
-            (rightElement.x > element.x + element.width) &&  // ensure the element actually is to the right
+            (rightElement.x + 3 > element.x + element.width) &&  // ensure the element actually is to the right
             (rightElement.x - (element.x + element.width) < 30) &&  // avoid elements that appear after a large gap (arbitrarily ensure less than a 30 pixel gap horizontally)
             calculateDistance(element, rightElement) < calculateDistance(element, closestElement))  // check if closer than any element encountered so far
             closestElement = rightElement;
