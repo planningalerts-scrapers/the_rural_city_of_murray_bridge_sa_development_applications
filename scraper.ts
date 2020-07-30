@@ -830,9 +830,9 @@ function findElement(elements: Element[], text: string, shouldSelectRightmostEle
             if (currentText.length >= condensedText.length - 2) {  // ignore until the text is close to long enough
                 if (currentText === condensedText)
                     matches.push({ leftElement: rightElements[0], rightElement: rightElement, threshold: 0, text: currentText });
-                else if (didyoumean(currentText, [ condensedText ], { caseSensitive: false, returnType: didyoumean.ReturnTypeEnums.FIRST_CLOSEST_MATCH, thresholdType: didyoumean.ThresholdTypeEnums.EDIT_DISTANCE, threshold: 1, trimSpaces: true }) !== null)
+                else if (didyoumean(currentText, [ condensedText ], { caseSensitive: false, returnType: "first-closest-match", thresholdType: "edit-distance", threshold: 1, trimSpaces: true }) !== null)
                     matches.push({ leftElement: rightElements[0], rightElement: rightElement, threshold: 1, text: currentText });
-                else if (didyoumean(currentText, [ condensedText ], { caseSensitive: false, returnType: didyoumean.ReturnTypeEnums.FIRST_CLOSEST_MATCH, thresholdType: didyoumean.ThresholdTypeEnums.EDIT_DISTANCE, threshold: 2, trimSpaces: true }) !== null)
+                else if (didyoumean(currentText, [ condensedText ], { caseSensitive: false, returnType: "first-closest-match", thresholdType: "edit-distance", threshold: 2, trimSpaces: true }) !== null)
                     matches.push({ leftElement: rightElements[0], rightElement: rightElement, threshold: 2, text: currentText });
             }
 
