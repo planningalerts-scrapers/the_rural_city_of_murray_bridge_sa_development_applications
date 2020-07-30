@@ -827,6 +827,7 @@ console.log(`    findElement(${text}), condensedText ${condensedText}, firstChar
 
             let currentText = rightElements.map(element => element.text).join("").replace(/[\s,\-_]/g, "").toLowerCase();
 
+console.log(`        currentText=${currentText}`);
             if (currentText.length > condensedText.length + 2)  // stop once the text is too long
                 break;
             if (currentText.length >= condensedText.length - 2) {  // ignore until the text is close to long enough
