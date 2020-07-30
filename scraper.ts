@@ -783,7 +783,7 @@ function findStartElements(elements: Element[]) {
         if (matches.length > 0) {
 let elementSummary = elements.map(element => `[${(element.text === undefined) ? "undefined" : element.text}]`).join("");
 console.log(`    For tracing purposes the elements are: ${elementSummary}`);
-let matchSummary = matches.map(match => `[${match.element.text},${match.element.threshold},${match.element.text.trim().length}]`).join("");
+let matchSummary = matches.map(match => `[${match.element.text},${match.threshold},${match.element.text.trim().length}]`).join("");
 console.log(`    For tracing purposes the match elements are: ${matchSummary}`);
             let bestMatch = matches.reduce((previous, current) =>
                 (previous === undefined ||
