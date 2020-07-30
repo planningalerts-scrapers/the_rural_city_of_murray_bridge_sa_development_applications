@@ -287,20 +287,21 @@ function getAboveElements(elements: Element[], leftElement: Element, belowElemen
 // which to find other elements for the application (such as the address elements).
 
 function getAssessmentNumberElement(elements: Element[], startElement: Element) {
-    // Find the "Assessment Number" or "Asses Num" text (allowing for spelling errors).
+    // Find the "Assessment Number", "Assess Num" or "Asses Num" text (while allowing for spelling
+    // errors).
 
     let assessmentNumberElement = elements.find(element =>
         element.y > startElement.y &&
-        didyoumean(element.text, [ "Assessment Number", "Asses Num" ], { caseSensitive: false, returnType: "first-closest-match", thresholdType: "edit-distance", threshold: 3, trimSpace: true }) !== null);
+        didyoumean(element.text, [ "Assessment Number", "Assess Num", "Asses Num" ], { caseSensitive: false, returnType: "first-closest-match", thresholdType: "edit-distance", threshold: 3, trimSpace: true }) !== null);
 
     if (assessmentNumberElement !== undefined)
         return assessmentNumberElement;
 
-    // Find any occurrences of the text "Assessment" or "Asses".
+    // Find any occurrences of the text "Assessment", "Assess" or "Asses".
 
     let assessmentElements = elements.filter(
         element => element.y > startElement.y &&
-        didyoumean(element.text, [ "Assessment", "Asses" ], { caseSensitive: false, returnType: "first-closest-match", thresholdType: "edit-distance", threshold: 2, trimSpace: true }) !== null);
+        didyoumean(element.text, [ "Assessment", "Assess", "Asses" ], { caseSensitive: false, returnType: "first-closest-match", thresholdType: "edit-distance", threshold: 2, trimSpace: true }) !== null);
 
     // Check if any of the occurrences of "Assessment" are followed by "Number" or "Num".
 
@@ -926,7 +927,7 @@ async function parsePdf(url: string) {
         // Find all the text elements (because there may be text in addition to images).
 
         let textContent = await page.getTextContent();
-        let elements: Element[] = textContent.items.map(item => {
+        let textElements: Element[] = textContent.items.map(item => {
             let transform = item.transform;
 
             // Work around the issue https://github.com/mozilla/pdf.js/issues/8276 (heights are
@@ -944,6 +945,7 @@ async function parsePdf(url: string) {
             return { text: item.str, x: x, y: y, width: width, height: height };
         });
 
+        let imageElements: Element[] = [];
         if (page.rotate !== 0) {
             // Ignore rotated pages when parsing images.
 
@@ -1006,12 +1008,20 @@ async function parsePdf(url: string) {
             
                 // Parse the text from the image.
 
-                elements = elements.concat(await parseImage(image, bounds));
+                imageElements = imageElements.concat(await parseImage(image, bounds));
                 if (global.gc)
                     global.gc();
             }
         }
 
+        // Merge the elements extracted from the text with the elements extracted from the images.
+
+        let elements: Element[] = [];
+        elements.concat(imageElements);
+        if (textElements !== undefined)
+            elements.concat(textElements);
+
+        if (text)
         // Release the memory used by the PDF now that it is no longer required (it will be
         // re-parsed on the next iteration of the loop for the next page).
 
