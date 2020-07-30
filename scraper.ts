@@ -788,7 +788,7 @@ console.log(`    For tracing purposes the match elements are: ${matchSummary}`);
             let bestMatch = matches.reduce((previous, current) =>
                 (previous === undefined ||
                 current.threshold < previous.threshold ||
-                (current.threshold === previous.threshold && Math.abs(current.text.trim().length - "DevAppNo.".length) <= Math.abs(previous.text.trim().length - "DevAppNo.".length)) ? current : previous), undefined);
+                (current.threshold === previous.threshold && Math.abs(current.element.text.trim().length - "DevAppNo.".length) <= Math.abs(previous.element.text.trim().length - "DevAppNo.".length)) ? current : previous), undefined);
             startElements.push(bestMatch.element);
         }
     }
