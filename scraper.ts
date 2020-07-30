@@ -162,7 +162,7 @@ function getRightElement(elements: Element[], element: Element) {
     for (let rightElement of elements)
         if (isVerticalOverlap(element, rightElement) &&  // ensure that there is at least some vertical overlap
             getVerticalOverlapPercentage(element, rightElement) > 50 &&  // avoid extremely tall elements (ensure at least 50% overlap)
-            (rightElement.x + 3 > element.x + element.width) &&  // ensure the element actually is to the right
+            (rightElement.x > element.x + element.width - 3) &&  // ensure the element actually is to the right (approximately)
             (rightElement.x - (element.x + element.width) < 30) &&  // avoid elements that appear after a large gap (arbitrarily ensure less than a 30 pixel gap horizontally)
             calculateDistance(element, rightElement) < calculateDistance(element, closestElement))  // check if closer than any element encountered so far
             closestElement = rightElement;
@@ -281,37 +281,6 @@ function getAboveElements(elements: Element[], leftElement: Element, belowElemen
     }
 
     return addressElements;
-}
-
-// Finds the element containing the "Assessment Number" text.  This is a good starting point from
-// which to find other elements for the application (such as the address elements).
-
-function getAssessmentNumberElement(elements: Element[], startElement: Element) {
-    // Find the "Assessment Number", "Assess Num" or "Asses Num" text (while allowing for spelling
-    // errors).
-
-    let assessmentNumberElement = elements.find(element =>
-        element.y > startElement.y &&
-        didyoumean(element.text, [ "Assessment Number", "Assess Num", "Asses Num" ], { caseSensitive: false, returnType: "first-closest-match", thresholdType: "edit-distance", threshold: 3, trimSpace: true }) !== null);
-
-    if (assessmentNumberElement !== undefined)
-        return assessmentNumberElement;
-
-    // Find any occurrences of the text "Assessment", "Assess" or "Asses".
-
-    let assessmentElements = elements.filter(
-        element => element.y > startElement.y &&
-        didyoumean(element.text, [ "Assessment", "Assess", "Asses" ], { caseSensitive: false, returnType: "first-closest-match", thresholdType: "edit-distance", threshold: 2, trimSpace: true }) !== null);
-
-    // Check if any of the occurrences of "Assessment" are followed by "Number" or "Num".
-
-    for (let assessmentElement of assessmentElements) {
-        let assessmentRightElement = getRightElement(elements, assessmentElement);
-        if (assessmentRightElement !== undefined && didyoumean(assessmentRightElement.text, [ "Number", "Num" ], { caseSensitive: false, returnType: "first-closest-match", thresholdType: "edit-distance", threshold: 2, trimSpace: true }) !== null)
-            return assessmentElement;
-    }
-
-    return undefined;
 }
 
 // Gets the element containining the received date.
@@ -999,29 +968,24 @@ async function parsePdf(url: string) {
         // Find all the text elements (because there may be text in addition to images).
 
         let textContent = await page.getTextContent();
+        let viewport = await page.getViewport(1.0);
+    
         let textElements: Element[] = textContent.items.map(item => {
-            let transform = item.transform;
-
+            let transform = pdfjs.Util.transform(viewport.transform, item.transform);
+    
             // Work around the issue https://github.com/mozilla/pdf.js/issues/8276 (heights are
             // exaggerated).  The problem seems to be that the height value is too large in some
             // PDFs.  Provide an alternative, more accurate height value by using a calculation
             // based on the transform matrix.
-
+    
             let workaroundHeight = Math.sqrt(transform[2] * transform[2] + transform[3] * transform[3]);
-
-            let x = transform[4];
-            let y = transform[5];
-            let width = item.width;
-            let height = workaroundHeight;
-
-            return { text: item.str, x: x, y: y, width: width, height: height };
+            return { text: item.str, confidence: 100, choiceCount: 1, bounds: { x: transform[4], y: transform[5], width: item.width, height: workaroundHeight } };
         });
         console.log(`    Found ${textElements.length} text element(s).`)
 
         // Find all image elements.
 
         let imageElements: Element[] = [];
-        let viewport = await page.getViewport(1.0);
         let operators = await page.getOperatorList();
 
         if (page.rotate !== 0) {
