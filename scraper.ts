@@ -780,8 +780,6 @@ function findElement(elements: Element[], text: string, shouldSelectRightmostEle
     let condensedText = text.replace(/[\s,\-_]/g, "").toLowerCase();
     let firstCharacter = condensedText.charAt(0);
 
-console.log(`    findElement(${text}), condensedText ${condensedText}, firstCharacter ${firstCharacter}`);
-
     let matches = [];
     for (let element of elements.filter(element => element.text.trim().toLowerCase().startsWith(firstCharacter))) {
         // Extract up to 5 elements to the right of the element that has text starting with the
@@ -796,11 +794,8 @@ console.log(`    findElement(${text}), condensedText ${condensedText}, firstChar
 
             let currentText = rightElements.map(element => element.text).join("").replace(/[\s,\-_]/g, "").toLowerCase();
 
-console.log(`        currentText=${currentText}, rightElements.length=${rightElements.length}`);
-            if (currentText.length > condensedText.length + 2) {  // stop once the text is too long
-console.log(`            Stopping because currentText length ${currentText.length} is longer than condensedText length + 2 ${condensedText.length + 2}`);
+            if (currentText.length > condensedText.length + 2)  // stop once the text is too long
                 break;
-            }
             if (currentText.length >= condensedText.length - 2) {  // ignore until the text is close to long enough
                 if (currentText === condensedText)
                     matches.push({ leftElement: rightElements[0], rightElement: rightElement, threshold: 0, text: currentText });
@@ -811,7 +806,6 @@ console.log(`            Stopping because currentText length ${currentText.lengt
             }
 
             rightElement = getRightElement(elements, rightElement);
-console.log(`        rightElement=${(rightElement === undefined) ? "undefined" : rightElement.text}, rightElements.length=${rightElements.length}`);
         } while (rightElement !== undefined && rightElements.length < 5);  // up to 5 elements
     }
 
@@ -823,10 +817,6 @@ console.log(`        rightElement=${(rightElement === undefined) ? "undefined" :
     // Note that if the match is made of several elements then sometimes the caller requires the
     // left most element and sometimes the right most element (depending on where further text
     // will be searched for relative to this "found" element).
-
-let elementSummary = elements.map(element => `[${element.text}]`).join("");
-console.log(`Elements: ${elementSummary}`);
-console.log(`Found ${matches.length} matches.`);
 
     if (matches.length > 0) {
         let bestMatch = matches.reduce((previous, current) =>
