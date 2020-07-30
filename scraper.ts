@@ -827,9 +827,11 @@ console.log(`    findElement(${text}), condensedText ${condensedText}, firstChar
 
             let currentText = rightElements.map(element => element.text).join("").replace(/[\s,\-_]/g, "").toLowerCase();
 
-console.log(`        currentText=${currentText}`);
-            if (currentText.length > condensedText.length + 2)  // stop once the text is too long
+console.log(`        currentText=${currentText}, rightElements.length=${rightElements.length}`);
+            if (currentText.length > condensedText.length + 2) {  // stop once the text is too long
+console.log(`            Stopping because currentText length ${currentText.length} is longer than condensedText length + 2 ${condensedText.length + 2}`);
                 break;
+            }
             if (currentText.length >= condensedText.length - 2) {  // ignore until the text is close to long enough
                 if (currentText === condensedText)
                     matches.push({ leftElement: rightElements[0], rightElement: rightElement, threshold: 0, text: currentText });
@@ -840,6 +842,7 @@ console.log(`        currentText=${currentText}`);
             }
 
             rightElement = getRightElement(elements, rightElement);
+console.log(`        rightElement=${(rightElement === undefined) ? "undefined" : rightElement.text}, rightElements.length=${rightElements.length}`);
         } while (rightElement !== undefined && rightElements.length < 5);  // up to 5 elements
     }
 
