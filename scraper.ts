@@ -923,74 +923,93 @@ async function parsePdf(url: string) {
         let viewport = await page.getViewport(1.0);
         let operators = await page.getOperatorList();
 
-        // Ensure that the page is not rotated.
+        // Find all the text elements (because there may be text in addition to images).
+
+        let textContent = await page.getTextContent();
+        let elements: Element[] = textContent.items.map(item => {
+            let transform = item.transform;
+
+            // Work around the issue https://github.com/mozilla/pdf.js/issues/8276 (heights are
+            // exaggerated).  The problem seems to be that the height value is too large in some
+            // PDFs.  Provide an alternative, more accurate height value by using a calculation
+            // based on the transform matrix.
+
+            let workaroundHeight = Math.sqrt(transform[2] * transform[2] + transform[3] * transform[3]);
+
+            let x = transform[4];
+            let y = transform[5];
+            let width = item.width;
+            let height = workaroundHeight;
+
+            return { text: item.str, x: x, y: y, width: width, height: height };
+        });
 
         if (page.rotate !== 0) {
-            console.log(`Ignoring page ${pageIndex + 1} because it is rotated ${page.rotate}°.`);
-            continue;
-        }
+            // Ignore rotated pages when parsing images.
 
-        // Find and parse any images in the current PDF page.
+            console.log(`Ignoring images in page ${pageIndex + 1} because it is rotated ${page.rotate}°.`);
+        } else {
+            // Find and parse any images in the current PDF page.
 
-        let elements: Element[] = [];
-        let isFirstImage = true;
+            let isFirstImage = true;
 
-        for (let index = 0; index < operators.fnArray.length; index++) {
-            if (operators.fnArray[index] !== pdfjs.OPS.paintImageXObject && operators.fnArray[index] !== pdfjs.OPS.paintImageMaskXObject)
-                continue;
+            for (let index = 0; index < operators.fnArray.length; index++) {
+                if (operators.fnArray[index] !== pdfjs.OPS.paintImageXObject && operators.fnArray[index] !== pdfjs.OPS.paintImageMaskXObject)
+                    continue;
 
-            // The operator either contains the name of an image or an actual image.
+                // The operator either contains the name of an image or an actual image.
 
-            let image = operators.argsArray[index][0];
-            if (typeof image === "string")
-                image = page.objs.get(image);  // get the actual image using its name
-            else
-                operators.argsArray[index][0] = undefined;  // attempt to release memory used by the image
+                let image = operators.argsArray[index][0];
+                if (typeof image === "string")
+                    image = page.objs.get(image);  // get the actual image using its name
+                else
+                    operators.argsArray[index][0] = undefined;  // attempt to release memory used by the image
 
-            // Obtain the transform that applies to the image.  Note that the first image in the
-            // PDF typically has a pdfjs.OPS.dependency element in the fnArray between it and its
-            // transform (pdfjs.OPS.transform).
+                // Obtain the transform that applies to the image.  Note that the first image in the
+                // PDF typically has a pdfjs.OPS.dependency element in the fnArray between it and its
+                // transform (pdfjs.OPS.transform).
 
-            let transform = undefined;
-            if (index - 1 >= 0 && operators.fnArray[index - 1] === pdfjs.OPS.transform)
-                transform = operators.argsArray[index - 1];
-            else if (index - 2 >= 0 && operators.fnArray[index - 1] === pdfjs.OPS.dependency && operators.fnArray[index - 2] === pdfjs.OPS.transform)
-                transform = operators.argsArray[index - 2];
-            else
-                continue;
+                let transform = undefined;
+                if (index - 1 >= 0 && operators.fnArray[index - 1] === pdfjs.OPS.transform)
+                    transform = operators.argsArray[index - 1];
+                else if (index - 2 >= 0 && operators.fnArray[index - 1] === pdfjs.OPS.dependency && operators.fnArray[index - 2] === pdfjs.OPS.transform)
+                    transform = operators.argsArray[index - 2];
+                else
+                    continue;
 
-            // Use the transform to translate the X and Y co-ordinates, but assume that the width
-            // and height are consistent between all images and do not need to be scaled.  This is
-            // almost always the case; only the first image is sometimes an exception (with a
-            // scale factor of 2.083333 instead of 4.166666).
+                // Use the transform to translate the X and Y co-ordinates, but assume that the width
+                // and height are consistent between all images and do not need to be scaled.  This is
+                // almost always the case; only the first image is sometimes an exception (with a
+                // scale factor of 2.083333 instead of 4.166666).
 
-            let bounds: Rectangle = {
-                x: (transform[4] * image.height) / transform[3],
-                y: ((viewport.height - transform[5] - transform[3]) * image.height) / transform[3],
-                width: image.width,
-                height: image.height
-            };
+                let bounds: Rectangle = {
+                    x: (transform[4] * image.height) / transform[3],
+                    y: ((viewport.height - transform[5] - transform[3]) * image.height) / transform[3],
+                    width: image.width,
+                    height: image.height
+                };
 
-            // Ignore the first image on the page as this is typically a white mask over the
-            // entire page.  And because it is typically at a different scale (2.083333 instead
-            // of 4.166666) then any text which is accidentally parsed will be set to the wrong
-            // X and Y co-ordinates.  It is easier just to ignore this first image.  In one case
-            // the text "HI:" was parsed and interfered with the "Dev App No." text resulting in
-            // an application being missed (see page 21 of the May 2018 PDF).
-            //
-            // Note that some PDFs have just one image with a scale of 2.777777 (and this should
-            // be parsed).
+                // Ignore the first image on the page as this is typically a white mask over the
+                // entire page.  And because it is typically at a different scale (2.083333 instead
+                // of 4.166666) then any text which is accidentally parsed will be set to the wrong
+                // X and Y co-ordinates.  It is easier just to ignore this first image.  In one case
+                // the text "HI:" was parsed and interfered with the "Dev App No." text resulting in
+                // an application being missed (see page 21 of the May 2018 PDF).
+                //
+                // Note that some PDFs have just one image with a scale of 2.777777 (and this should
+                // be parsed).
 
-            let scaleY = image.height / transform[3];
-            if (scaleY < 2.5 && isFirstImage && image.height >= 1000 && image.width >= 1000)
-                continue;
-            isFirstImage = false;
-           
-            // Parse the text from the image.
+                let scaleY = image.height / transform[3];
+                if (scaleY < 2.5 && isFirstImage && image.height >= 1000 && image.width >= 1000)
+                    continue;
+                isFirstImage = false;
+            
+                // Parse the text from the image.
 
-            elements = elements.concat(await parseImage(image, bounds));
-            if (global.gc)
-                global.gc();
+                elements = elements.concat(await parseImage(image, bounds));
+                if (global.gc)
+                    global.gc();
+            }
         }
 
         // Release the memory used by the PDF now that it is no longer required (it will be
