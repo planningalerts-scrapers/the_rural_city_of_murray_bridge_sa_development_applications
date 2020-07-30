@@ -1137,9 +1137,14 @@ async function main() {
 
     // Retrieve the pages that contain the links to the PDFs.
 
-    let pdfUrls: string[] = [];
+    let pdfUrls: string[] = [ "http://www.murraybridge.sa.gov.au/__data/assets/pdf_file/0026/553463/February-2020.pdf" ];
 
-    for (let index = 1; index <= 10; index++) {  // search up to 10 pages
+    // let pdfUrls: string[] = [];
+    // for (let index = 1; index <= 10; index++) {  // search up to 10 pages
+    
+    // Ignore all pages for testing purposes.    
+    
+    for (let index = 1; index <= 0; index++) {  // search up to 10 pages
         let url = DevelopmentApplicationsUrl.replace(/\{0\}/g, index.toString());
         console.log(`Retrieving page: ${url}`);
 
