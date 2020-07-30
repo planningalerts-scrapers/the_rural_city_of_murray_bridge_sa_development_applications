@@ -495,7 +495,7 @@ function parseApplicationElements(elements: Element[], startElement: Element, in
     let assessmentNumberElement = getAssessmentNumberElement(elements, startElement);
     if (assessmentNumberElement === undefined) {
         let elementSummary = elements.map(element => `[${element.text}]`).join("");
-        console.log(`Could not find the \"Assessment Number\" or \"Asses Num\" text on the PDF page for the current development application.  The development application will be ignored.  Elements: ${elementSummary}`);
+        console.log(`Could not find the \"Assessment Number\", \"Assess Num\" or \"Asses Num\" text on the PDF page for the current development application.  The development application will be ignored.  Elements: ${elementSummary}`);
         return undefined;
     }
 
@@ -1026,8 +1026,8 @@ async function parsePdf(url: string) {
         let elements: Element[] = [];
         elements.concat(textElements);
         elements.concat(imageElements);
+        console.log(`    Found a total of ${elements.length} text and image element(s).`)
 
-        if (text)
         // Release the memory used by the PDF now that it is no longer required (it will be
         // re-parsed on the next iteration of the loop for the next page).
 
@@ -1053,6 +1053,10 @@ async function parsePdf(url: string) {
 
         let applicationElementGroups = [];
         let startElements = findStartElements(elements);
+        if (startElements.length === 0) {
+            let elementSummary = elements.map(element => `[${element.text}]`).join("");
+            console.log(`    Could not find any start elements in: ${elementSummary}`);
+        }
         for (let index = 0; index < startElements.length; index++) {
             // Determine the highest Y co-ordinate of this row and the next row (or the bottom of
             // the current page).  Allow some leeway vertically (add some extra height) because
