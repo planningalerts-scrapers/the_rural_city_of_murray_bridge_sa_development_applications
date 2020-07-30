@@ -921,8 +921,6 @@ async function parsePdf(url: string) {
 
         console.log(`Reading and parsing applications from page ${pageIndex + 1} of ${pdf.numPages}.`);
         let page = await pdf.getPage(pageIndex + 1);
-        let viewport = await page.getViewport(1.0);
-        let operators = await page.getOperatorList();
 
         // Find all the text elements (because there may be text in addition to images).
 
@@ -944,8 +942,16 @@ async function parsePdf(url: string) {
 
             return { text: item.str, x: x, y: y, width: width, height: height };
         });
+        if (textElements === undefined)
+            textElements = [];
+        console.log(`    Found ${textElements.length} text element(s).`)
+
+        // Find all image elements.
 
         let imageElements: Element[] = [];
+        let viewport = await page.getViewport(1.0);
+        let operators = await page.getOperatorList();
+
         if (page.rotate !== 0) {
             // Ignore rotated pages when parsing images.
 
@@ -1013,13 +1019,13 @@ async function parsePdf(url: string) {
                     global.gc();
             }
         }
+        console.log(`    Found ${imageElements.length} image element(s).`)
 
         // Merge the elements extracted from the text with the elements extracted from the images.
 
         let elements: Element[] = [];
+        elements.concat(textElements);
         elements.concat(imageElements);
-        if (textElements !== undefined)
-            elements.concat(textElements);
 
         if (text)
         // Release the memory used by the PDF now that it is no longer required (it will be
