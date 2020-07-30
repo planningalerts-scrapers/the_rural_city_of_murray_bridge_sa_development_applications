@@ -1024,8 +1024,8 @@ async function parsePdf(url: string) {
         // Merge the elements extracted from the text with the elements extracted from the images.
 
         let elements: Element[] = [];
-        elements.concat(textElements);
-        elements.concat(imageElements);
+        elements = elements.concat(textElements);
+        elements =elements.concat(imageElements);
         console.log(`    Found a total of ${elements.length} text and image element(s).`)
 
         // Release the memory used by the PDF now that it is no longer required (it will be
