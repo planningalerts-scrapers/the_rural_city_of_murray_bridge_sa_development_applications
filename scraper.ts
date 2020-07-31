@@ -27,7 +27,7 @@ import * as didyoumean from "didyoumean2";
 
 sqlite3.verbose();
 
-const DevelopmentApplicationsUrl = "http://www.murraybridge.sa.gov.au/page.aspx?u=1022";
+const DevelopmentApplicationsUrl = "https://www.murraybridge.sa.gov.au/services/develop-plan-build/developmentandplanning/development-assessment-register?result_57806_result_page={0}";
 const CommentUrl = "mailto:council@murraybridge.sa.gov.au";
 
 declare const global: any;
@@ -70,7 +70,7 @@ async function insertRow(database, developmentApplication) {
                 console.error(error);
                 reject(error);
             } else {
-                console.log(`    Saved: application \"${developmentApplication.applicationNumber}\" with address \"${developmentApplication.address}\", description \"${developmentApplication.description}\", legal description \"${developmentApplication.legalDescription}\" and received date \"${developmentApplication.receivedDate}\" into the database.`);
+                console.log(`    Saved application \"${developmentApplication.applicationNumber}\" with address \"${developmentApplication.address}\", description \"${developmentApplication.description}\", legal description \"${developmentApplication.legalDescription}\" and received date \"${developmentApplication.receivedDate}\" to the database.`);
                 sqlStatement.finalize();  // releases any locks
                 resolve(row);
             }
@@ -162,7 +162,7 @@ function getRightElement(elements: Element[], element: Element) {
     for (let rightElement of elements)
         if (isVerticalOverlap(element, rightElement) &&  // ensure that there is at least some vertical overlap
             getVerticalOverlapPercentage(element, rightElement) > 50 &&  // avoid extremely tall elements (ensure at least 50% overlap)
-            (rightElement.x > element.x + element.width) &&  // ensure the element actually is to the right
+            (rightElement.x > element.x + element.width - 3) &&  // ensure the element actually is to the right (approximately)
             (rightElement.x - (element.x + element.width) < 30) &&  // avoid elements that appear after a large gap (arbitrarily ensure less than a 30 pixel gap horizontally)
             calculateDistance(element, rightElement) < calculateDistance(element, closestElement))  // check if closer than any element encountered so far
             closestElement = rightElement;
@@ -281,36 +281,6 @@ function getAboveElements(elements: Element[], leftElement: Element, belowElemen
     }
 
     return addressElements;
-}
-
-// Finds the element containing the "Assessment Number" text.  This is a good starting point from
-// which to find other elements for the application (such as the address elements).
-
-function getAssessmentNumberElement(elements: Element[], startElement: Element) {
-    // Find the "Assessment Number" or "Asses Num" text (allowing for spelling errors).
-
-    let assessmentNumberElement = elements.find(element =>
-        element.y > startElement.y &&
-        didyoumean(element.text, [ "Assessment Number", "Asses Num" ], { caseSensitive: false, returnType: "first-closest-match", thresholdType: "edit-distance", threshold: 3, trimSpace: true }) !== null);
-
-    if (assessmentNumberElement !== undefined)
-        return assessmentNumberElement;
-
-    // Find any occurrences of the text "Assessment" or "Asses".
-
-    let assessmentElements = elements.filter(
-        element => element.y > startElement.y &&
-        didyoumean(element.text, [ "Assessment", "Asses" ], { caseSensitive: false, returnType: "first-closest-match", thresholdType: "edit-distance", threshold: 2, trimSpace: true }) !== null);
-
-    // Check if any of the occurrences of "Assessment" are followed by "Number" or "Num".
-
-    for (let assessmentElement of assessmentElements) {
-        let assessmentRightElement = getRightElement(elements, assessmentElement);
-        if (assessmentRightElement !== undefined && didyoumean(assessmentRightElement.text, [ "Number", "Num" ], { caseSensitive: false, returnType: "first-closest-match", thresholdType: "edit-distance", threshold: 2, trimSpace: true }) !== null)
-            return assessmentElement;
-    }
-
-    return undefined;
 }
 
 // Gets the element containining the received date.
@@ -491,10 +461,16 @@ function getAddress(elements: Element[], assessmentNumberElement: Element, middl
 function parseApplicationElements(elements: Element[], startElement: Element, informationUrl: string) {
     // Find the "Assessment Number" or "Asses Num" text.
 
-    let assessmentNumberElement = getAssessmentNumberElement(elements, startElement);
+    // let assessmentNumberElement = getAssessmentNumberElement(elements, startElement);
+
+    let assessmentNumberElement = findElement(elements, "Asses Num", false);
+    if (assessmentNumberElement === undefined)
+        assessmentNumberElement = findElement(elements, "Assess Num", false);
+    if (assessmentNumberElement === undefined)
+        assessmentNumberElement = findElement(elements, "Assessment Number", false);
     if (assessmentNumberElement === undefined) {
         let elementSummary = elements.map(element => `[${element.text}]`).join("");
-        console.log(`Could not find the \"Assessment Number\" or \"Asses Num\" text on the PDF page for the current development application.  The development application will be ignored.  Elements: ${elementSummary}`);
+        console.log(`Could not find the \"Assessment Number\", \"Assess Num\" or \"Asses Num\" text on the PDF page for the current development application.  The development application will be ignored.  Elements: ${elementSummary}`);
         return undefined;
     }
 
@@ -767,11 +743,11 @@ function findStartElements(elements: Element[]) {
                 break;
             if (text.length >= 7) {  // ignore until the text is close to long enough
                 if (text === "devappno" || text === "devappno.")
-                    matches.push({ element: rightElement, threshold: 0 });
+                    matches.push({ element: rightElement, threshold: 0, text: text });
                 else if (didyoumean(text, [ "DevAppNo", "DevAppNo." ], { caseSensitive: false, returnType: "first-closest-match", thresholdType: "edit-distance", threshold: 1, trimSpace: true }) !== null)
-                    matches.push({ element: rightElement, threshold: 1 });
+                    matches.push({ element: rightElement, threshold: 1, text: text });
                 else if (didyoumean(text, [ "DevAppNo", "DevAppNo." ], { caseSensitive: false, returnType: "first-closest-match", thresholdType: "edit-distance", threshold: 2, trimSpace: true }) !== null)
-                    matches.push({ element: rightElement, threshold: 2 });
+                    matches.push({ element: rightElement, threshold: 2, text: text });
             }
 
             rightElement = getRightElement(elements, rightElement);
@@ -782,8 +758,8 @@ function findStartElements(elements: Element[]) {
         if (matches.length > 0) {
             let bestMatch = matches.reduce((previous, current) =>
                 (previous === undefined ||
-                previous.threshold < current.threshold ||
-                (previous.threshold === current.threshold && Math.abs(previous.text.length - "DevAppNo.".length) <= Math.abs(current.text.length - "DevAppNo.".length)) ? current : previous), undefined);
+                current.threshold < previous.threshold ||
+                (current.threshold === previous.threshold && Math.abs(current.text.trim().length - "DevAppNo.".length) <= Math.abs(previous.text.trim().length - "DevAppNo.".length)) ? current : previous), undefined);
             startElements.push(bestMatch.element);
         }
     }
@@ -793,6 +769,64 @@ function findStartElements(elements: Element[]) {
     let yComparer = (a, b) => (a.y > b.y) ? 1 : ((a.y < b.y) ? -1 : 0);
     startElements.sort(yComparer);
     return startElements;
+}
+
+// Finds the element that most closely matches the specified text.
+
+function findElement(elements: Element[], text: string, shouldSelectRightmostElement: boolean) {
+    // Examine all the elements on the page that being with the same character as the requested
+    // text.
+    
+    let condensedText = text.replace(/[\s,\-_]/g, "").toLowerCase();
+    let firstCharacter = condensedText.charAt(0);
+
+    let matches = [];
+    for (let element of elements.filter(element => element.text.trim().toLowerCase().startsWith(firstCharacter))) {
+        // Extract up to 5 elements to the right of the element that has text starting with the
+        // required character (and so may be the start of the requested text).  Join together the
+        // elements to the right in an attempt to find the best match to the text.
+
+        let rightElement = element;
+        let rightElements: Element[] = [];
+
+        do {
+            rightElements.push(rightElement);
+
+            let currentText = rightElements.map(element => element.text).join("").replace(/[\s,\-_]/g, "").toLowerCase();
+
+            if (currentText.length > condensedText.length + 2)  // stop once the text is too long
+                break;
+            if (currentText.length >= condensedText.length - 2) {  // ignore until the text is close to long enough
+                if (currentText === condensedText)
+                    matches.push({ leftElement: rightElements[0], rightElement: rightElement, threshold: 0, text: currentText });
+                else if (didyoumean(currentText, [ condensedText ], { caseSensitive: false, returnType: "first-closest-match", thresholdType: "edit-distance", threshold: 1, trimSpace: true }) !== null)
+                    matches.push({ leftElement: rightElements[0], rightElement: rightElement, threshold: 1, text: currentText });
+                else if (didyoumean(currentText, [ condensedText ], { caseSensitive: false, returnType: "first-closest-match", thresholdType: "edit-distance", threshold: 2, trimSpace: true }) !== null)
+                    matches.push({ leftElement: rightElements[0], rightElement: rightElement, threshold: 2, text: currentText });
+            }
+
+            rightElement = getRightElement(elements, rightElement);
+        } while (rightElement !== undefined && rightElements.length < 5);  // up to 5 elements
+    }
+
+    // Chose the best match (if any matches were found).  Note that trimming is performed here so
+    // that text such as "  Plan" is matched in preference to text such as "plan)" (when looking
+    // for elements that match "Plan").  For an example of this problem see "200/303/07" in
+    // "https://www.walkerville.sa.gov.au/webdata/resources/files/DA%20Register%20-%202007.pdf".
+    //
+    // Note that if the match is made of several elements then sometimes the caller requires the
+    // left most element and sometimes the right most element (depending on where further text
+    // will be searched for relative to this "found" element).
+
+    if (matches.length > 0) {
+        let bestMatch = matches.reduce((previous, current) =>
+            (previous === undefined ||
+            current.threshold < previous.threshold ||
+            (current.threshold === previous.threshold && Math.abs(current.text.trim().length - condensedText.length) < Math.abs(previous.text.trim().length - condensedText.length)) ? current : previous), undefined);
+        return shouldSelectRightmostElement ? bestMatch.rightElement : bestMatch.leftElement;
+    }
+
+    return undefined;
 }
 
 // Converts image data from the PDF to a jimp format image.
@@ -920,78 +954,112 @@ async function parsePdf(url: string) {
 
         console.log(`Reading and parsing applications from page ${pageIndex + 1} of ${pdf.numPages}.`);
         let page = await pdf.getPage(pageIndex + 1);
+
+        // Find all the text elements (because there may be text in addition to images).
+
+        let textContent = await page.getTextContent();
         let viewport = await page.getViewport(1.0);
+
+        let textElements: Element[] = textContent.items.map(item => {
+            let transform = pdfjs.Util.transform(viewport.transform, item.transform);
+
+            // Work around the issue https://github.com/mozilla/pdf.js/issues/8276 (heights are
+            // exaggerated).  The problem seems to be that the height value is too large in some
+            // PDFs.  Provide an alternative, more accurate height value by using a calculation
+            // based on the transform matrix.
+
+            let workaroundHeight = Math.sqrt(transform[2] * transform[2] + transform[3] * transform[3]);
+
+            let x = transform[4];
+            let y = transform[5];
+            let width = item.width;
+            let height = workaroundHeight;
+
+            return { text: item.str, x: x, y: y, width: width, height: height };
+        });
+        console.log(`    Found ${textElements.length} text element(s).`)
+
+        // Find all image elements.
+
+        let imageElements: Element[] = [];
         let operators = await page.getOperatorList();
 
-        // Ensure that the page is not rotated.
-
         if (page.rotate !== 0) {
-            console.log(`Ignoring page ${pageIndex + 1} because it is rotated ${page.rotate}°.`);
-            continue;
-        }
+            // Ignore rotated pages when parsing images.
 
-        // Find and parse any images in the current PDF page.
+            console.log(`Ignoring images in page ${pageIndex + 1} because it is rotated ${page.rotate}°.`);
+        } else {
+            // Find and parse any images in the current PDF page.
+
+            let isFirstImage = true;
+
+            for (let index = 0; index < operators.fnArray.length; index++) {
+                if (operators.fnArray[index] !== pdfjs.OPS.paintImageXObject && operators.fnArray[index] !== pdfjs.OPS.paintImageMaskXObject)
+                    continue;
+
+                // The operator either contains the name of an image or an actual image.
+
+                let image = operators.argsArray[index][0];
+                if (typeof image === "string")
+                    image = page.objs.get(image);  // get the actual image using its name
+                else
+                    operators.argsArray[index][0] = undefined;  // attempt to release memory used by the image
+
+                // Obtain the transform that applies to the image.  Note that the first image in the
+                // PDF typically has a pdfjs.OPS.dependency element in the fnArray between it and its
+                // transform (pdfjs.OPS.transform).
+
+                let transform = undefined;
+                if (index - 1 >= 0 && operators.fnArray[index - 1] === pdfjs.OPS.transform)
+                    transform = operators.argsArray[index - 1];
+                else if (index - 2 >= 0 && operators.fnArray[index - 1] === pdfjs.OPS.dependency && operators.fnArray[index - 2] === pdfjs.OPS.transform)
+                    transform = operators.argsArray[index - 2];
+                else
+                    continue;
+
+                // Use the transform to translate the X and Y co-ordinates, but assume that the width
+                // and height are consistent between all images and do not need to be scaled.  This is
+                // almost always the case; only the first image is sometimes an exception (with a
+                // scale factor of 2.083333 instead of 4.166666).
+
+                let bounds: Rectangle = {
+                    x: (transform[4] * image.height) / transform[3],
+                    y: ((viewport.height - transform[5] - transform[3]) * image.height) / transform[3],
+                    width: image.width,
+                    height: image.height
+                };
+
+                // Ignore the first image on the page as this is typically a white mask over the
+                // entire page.  And because it is typically at a different scale (2.083333 instead
+                // of 4.166666) then any text which is accidentally parsed will be set to the wrong
+                // X and Y co-ordinates.  It is easier just to ignore this first image.  In one case
+                // the text "HI:" was parsed and interfered with the "Dev App No." text resulting in
+                // an application being missed (see page 21 of the May 2018 PDF).
+                //
+                // Note that some PDFs have just one image with a scale of 2.777777 (and this should
+                // be parsed).
+
+                let scaleY = image.height / transform[3];
+                if (scaleY < 2.5 && isFirstImage && image.height >= 1000 && image.width >= 1000)
+                    continue;
+                isFirstImage = false;
+            
+                // Parse the text from the image.
+
+                imageElements = imageElements.concat(await parseImage(image, bounds));
+                if (global.gc)
+                    global.gc();
+            }
+        }
+        console.log(`    Found ${imageElements.length} image element(s).`)
+
+        // Merge the elements extracted from the text on the current page with the elements
+        // extracted from the images on the current page.
 
         let elements: Element[] = [];
-        let isFirstImage = true;
-
-        for (let index = 0; index < operators.fnArray.length; index++) {
-            if (operators.fnArray[index] !== pdfjs.OPS.paintImageXObject && operators.fnArray[index] !== pdfjs.OPS.paintImageMaskXObject)
-                continue;
-
-            // The operator either contains the name of an image or an actual image.
-
-            let image = operators.argsArray[index][0];
-            if (typeof image === "string")
-                image = page.objs.get(image);  // get the actual image using its name
-            else
-                operators.argsArray[index][0] = undefined;  // attempt to release memory used by the image
-
-            // Obtain the transform that applies to the image.  Note that the first image in the
-            // PDF typically has a pdfjs.OPS.dependency element in the fnArray between it and its
-            // transform (pdfjs.OPS.transform).
-
-            let transform = undefined;
-            if (index - 1 >= 0 && operators.fnArray[index - 1] === pdfjs.OPS.transform)
-                transform = operators.argsArray[index - 1];
-            else if (index - 2 >= 0 && operators.fnArray[index - 1] === pdfjs.OPS.dependency && operators.fnArray[index - 2] === pdfjs.OPS.transform)
-                transform = operators.argsArray[index - 2];
-            else
-                continue;
-
-            // Use the transform to translate the X and Y co-ordinates, but assume that the width
-            // and height are consistent between all images and do not need to be scaled.  This is
-            // almost always the case; only the first image is sometimes an exception (with a
-            // scale factor of 2.083333 instead of 4.166666).
-
-            let bounds: Rectangle = {
-                x: (transform[4] * image.height) / transform[3],
-                y: ((viewport.height - transform[5] - transform[3]) * image.height) / transform[3],
-                width: image.width,
-                height: image.height
-            };
-
-            // Ignore the first image on the page as this is typically a white mask over the
-            // entire page.  And because it is typically at a different scale (2.083333 instead
-            // of 4.166666) then any text which is accidentally parsed will be set to the wrong
-            // X and Y co-ordinates.  It is easier just to ignore this first image.  In one case
-            // the text "HI:" was parsed and interfered with the "Dev App No." text resulting in
-            // an application being missed (see page 21 of the May 2018 PDF).
-            //
-            // Note that some PDFs have just one image with a scale of 2.777777 (and this should
-            // be parsed).
-
-            let scaleY = image.height / transform[3];
-            if (scaleY < 2.5 && isFirstImage && image.height >= 1000 && image.width >= 1000)
-                continue;
-            isFirstImage = false;
-           
-            // Parse the text from the image.
-
-            elements = elements.concat(await parseImage(image, bounds));
-            if (global.gc)
-                global.gc();
-        }
+        elements = elements.concat(textElements);
+        elements = elements.concat(imageElements);
+        console.log(`    Found a total of ${elements.length} text and image element(s) on the current page.`)
 
         // Release the memory used by the PDF now that it is no longer required (it will be
         // re-parsed on the next iteration of the loop for the next page).
@@ -1018,6 +1086,11 @@ async function parsePdf(url: string) {
 
         let applicationElementGroups = [];
         let startElements = findStartElements(elements);
+        if (startElements.length === 0) {
+            let elementSummary = elements.map(element => `[${element.text}]`).join("");
+            console.log(`    Could not find any start elements in: ${elementSummary}`);
+        }
+
         for (let index = 0; index < startElements.length; index++) {
             // Determine the highest Y co-ordinate of this row and the next row (or the bottom of
             // the current page).  Allow some leeway vertically (add some extra height) because
@@ -1106,26 +1179,31 @@ async function main() {
 
     readAddressInformation();
 
-    // Retrieve the page that contains the links to the PDFs.
+    // Retrieve the pages that contain the links to the PDFs.
 
-    console.log(`Retrieving page: ${DevelopmentApplicationsUrl}`);
-
-    let body = await request({ url: DevelopmentApplicationsUrl, proxy: process.env.MORPH_PROXY });
-    await sleep(2000 + getRandom(0, 5) * 1000);
-    let $ = cheerio.load(body);
-    
     let pdfUrls: string[] = [];
-    for (let element of $("td.uContentListDesc a[href$='.pdf']").get()) {
-        let pdfUrl = new urlparser.URL(element.attribs.href, DevelopmentApplicationsUrl);
-        pdfUrl.protocol = "http";  // force to use HTTP instead of HTTPS
-        if (!pdfUrls.some(url => url === pdfUrl.href))  // avoid duplicates
-            pdfUrls.push(pdfUrl.href);
+    for (let index = 1; index <= 10; index++) {  // search up to 10 pages
+        let url = DevelopmentApplicationsUrl.replace(/\{0\}/g, index.toString());
+        console.log(`Retrieving page: ${url}`);
+
+        let body = await request({ url: url, proxy: process.env.MORPH_PROXY });
+        await sleep(2000 + getRandom(0, 5) * 1000);
+        let $ = cheerio.load(body);
+        
+        for (let element of $("h3.generic-list__title a").get()) {
+            let pdfUrl = new urlparser.URL(element.attribs.href, DevelopmentApplicationsUrl);
+            pdfUrl.protocol = "http";  // force to use HTTP instead of HTTPS
+            if (pdfUrl.href.toLowerCase().includes(".pdf"))
+                if (!pdfUrls.some(url => url === pdfUrl.href))  // avoid duplicates
+                    pdfUrls.push(pdfUrl.href);
+        }
     }
 
     if (pdfUrls.length === 0) {
         console.log("No PDF URLs were found on the page.");
         return;
     }
+    console.log(`Found ${pdfUrls.length} PDF URL(s).`);
 
     // Select the most recent PDF.  And randomly select one other PDF (avoid processing all PDFs
     // at once because this may use too much memory, resulting in morph.io terminating the current
@@ -1134,7 +1212,7 @@ async function main() {
     let selectedPdfUrls: string[] = [];
     selectedPdfUrls.push(pdfUrls.shift());
     if (pdfUrls.length > 0)
-        selectedPdfUrls.push(pdfUrls[getRandom(1, pdfUrls.length)]);
+        selectedPdfUrls.push(pdfUrls[getRandom(0, pdfUrls.length)]);
     if (getRandom(0, 2) === 0)
         selectedPdfUrls.reverse();
 
